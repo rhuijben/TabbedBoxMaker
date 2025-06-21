@@ -430,10 +430,10 @@ class BoxMakerCore:
         else:
             self.linethickness = 1
 
-        # Use the design dimensions and apply kerf for manufacturing
-        X = self.design.length_external + self.kerf
-        Y = self.design.width_external + self.kerf
-        Z = self.design.height_external + self.kerf
+        # Use the design dimensions directly - kerf compensation is applied during path generation
+        X = self.design.length_external
+        Y = self.design.width_external
+        Z = self.design.height_external
         
         if self.kerf > min(X, Y, Z) / 3:
             raise ValueError('Error: Kerf too large')
