@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Test script for BoxMaker functionality
 Tests various configurations to ensure the refactored code works correctly
@@ -34,10 +34,10 @@ def test_basic_box():
     try:
         result = core.generate_box()
         assert len(result['paths']) > 0, "Should generate some paths"
-        print("✓ Basic box test passed")
+        print("[PASS] Basic box test passed")
         return True
     except Exception as e:
-        print(f"✗ Basic box test failed: {e}")
+        print(f"[FAIL] Basic box test failed: {e}")
         return False
 
 
@@ -61,10 +61,10 @@ def test_box_with_dividers():
     try:
         result = core.generate_box()
         assert len(result['paths']) > 0, "Should generate paths for box and dividers"
-        print("✓ Box with dividers test passed")
+        print("[PASS] Box with dividers test passed")
         return True
     except Exception as e:
-        print(f"✗ Box with dividers test failed: {e}")
+        print(f"[FAIL] Box with dividers test failed: {e}")
         return False
 
 
@@ -86,10 +86,10 @@ def test_different_material_thickness():
     try:
         result = core.generate_box()
         assert len(result['paths']) > 0, "Should generate paths with thicker material"
-        print("✓ Different material thickness test passed")
+        print("[PASS] Different material thickness test passed")
         return True
     except Exception as e:
-        print(f"✗ Different material thickness test failed: {e}")
+        print(f"[FAIL] Different material thickness test failed: {e}")
         return False
 
 
@@ -131,10 +131,10 @@ def test_cnc_vs_laser():
         # The paths should be different due to dogbone cuts
         assert result_laser['paths'] != result_cnc['paths'], "Laser and CNC paths should differ"
         
-        print("✓ CNC vs Laser test passed")
+        print("[PASS] CNC vs Laser test passed")
         return True
     except Exception as e:
-        print(f"✗ CNC vs Laser test failed: {e}")
+        print(f"[FAIL] CNC vs Laser test failed: {e}")
         return False
 
 
@@ -172,10 +172,10 @@ def test_svg_generation():
         # Clean up
         os.unlink(temp_path)
         
-        print("✓ SVG generation test passed")
+        print("[PASS] SVG generation test passed")
         return True
     except Exception as e:
-        print(f"✗ SVG generation test failed: {e}")
+        print(f"[FAIL] SVG generation test failed: {e}")
         return False
 
 
@@ -188,10 +188,10 @@ def test_error_conditions():
     try:
         core.set_parameters(length=0, width=100, height=50)
         core.generate_box()
-        print("✗ Should have raised error for zero dimensions")
+        print("[FAIL] Should have raised error for zero dimensions")
         return False
     except DimensionError:
-        print("✓ Correctly handled zero dimensions")
+        print("[PASS] Correctly handled zero dimensions")
     
     # Test tab too large (physical constraint - larger than dimension/3)
     core = BoxMakerCore()
@@ -199,10 +199,10 @@ def test_error_conditions():
         # 200x250x100mm box with 80mm tabs (larger than 100mm/3 = 33mm)
         core.set_parameters(length=200, width=250, height=100, tab=80, thickness=3)
         core.generate_box()
-        print("✗ Should have raised error for oversized tab")
+        print("[FAIL] Should have raised error for oversized tab")
         return False
     except TabError:
-        print("✓ Correctly handled oversized tab")    
+        print("[PASS] Correctly handled oversized tab")
     
     # Test thickness too large for dimensions
     core = BoxMakerCore()
@@ -210,10 +210,10 @@ def test_error_conditions():
         # Small 6x6x6cm box with 3.5cm thickness (more than half)
         core.set_parameters(length=60, width=60, height=60, thickness=35, tab=19)  # 19mm < 20mm (60/3) and > 17.5mm (35*0.5)
         core.generate_box()
-        print("✗ Should have raised error for excessive thickness")
+        print("[FAIL] Should have raised error for excessive thickness")
         return False
     except MaterialError:
-        print("✓ Correctly handled excessive thickness")
+        print("[PASS] Correctly handled excessive thickness")
     
     return True
 
@@ -240,10 +240,10 @@ def test_box_layouts():
             result = core.generate_box()
             assert len(result['paths']) > 0, f"Layout {layout} should generate paths"
         except Exception as e:
-            print(f"✗ Layout {layout} test failed: {e}")
+            print(f"[FAIL] Layout {layout} test failed: {e}")
             return False
     
-    print("✓ All layout tests passed")
+    print("[PASS] All layout tests passed")
     return True
 
 
@@ -300,10 +300,10 @@ def test_save_test_files():
             
             print(f"  Generated: {output_file}")
         
-        print("✓ Test files generated successfully")
+        print("[PASS] Test files generated successfully")
         return True
     except Exception as e:
-        print(f"✗ Test file generation failed: {e}")
+        print(f"[FAIL] Test file generation failed: {e}")
         return False
 
 
@@ -321,10 +321,10 @@ def test_realistic_compartment_box():
     
     try:
         core.generate_box()
-        print("✓ Realistic compartment box test passed")
+        print("[PASS] Realistic compartment box test passed")
         return True
     except Exception as e:
-        print(f"✗ Realistic compartment box test failed: {e}")
+        print(f"[FAIL] Realistic compartment box test failed: {e}")
         return False
 
 
@@ -342,13 +342,13 @@ def test_thin_tabs():
         
         # Should generate valid SVG
         if '<svg' in svg_content and '</svg>' in svg_content:
-            print("✓ Thin tabs test passed (tabs allowed but may be weak)")
+            print("[PASS] Thin tabs test passed (tabs allowed but may be weak)")
             return True
         else:
-            print("✗ Failed to generate valid SVG for thin tabs")
+            print("[FAIL] Failed to generate valid SVG for thin tabs")
             return False
     except Exception as e:
-        print(f"✗ Unexpected error with thin tabs: {e}")
+        print(f"[FAIL] Unexpected error with thin tabs: {e}")
         return False
 
 
@@ -368,13 +368,13 @@ def test_large_box_big_tabs():
         svg_content = core.generate_svg()
         
         if '<svg' in svg_content and '</svg>' in svg_content:
-            print("✓ Large box with big tabs test passed")
+            print("[PASS] Large box with big tabs test passed")
             return True
         else:
-            print("✗ Failed to generate valid SVG for large box")
+            print("[FAIL] Failed to generate valid SVG for large box")
             return False
     except Exception as e:
-        print(f"✗ Large box test failed: {e}")
+        print(f"[FAIL] Large box test failed: {e}")
         return False
 
 
@@ -400,13 +400,13 @@ def test_custom_compartment_sizes():
         svg_content = core.generate_svg()
         
         if '<svg' in svg_content and '</svg>' in svg_content:
-            print("✓ Custom compartment sizes test passed")
+            print("[PASS] Custom compartment sizes test passed")
             return True
         else:
-            print("✗ Failed to generate valid SVG for custom compartments")
+            print("[FAIL] Failed to generate valid SVG for custom compartments")
             return False
     except Exception as e:
-        print(f"✗ Custom compartment sizes test failed: {e}")
+        print(f"[FAIL] Custom compartment sizes test failed: {e}")
         return False
 
 
@@ -428,13 +428,13 @@ def test_mixed_custom_compartments():
         svg_content = core.generate_svg()
         
         if '<svg' in svg_content and '</svg>' in svg_content:
-            print("✓ Mixed custom compartments test passed")
+            print("[PASS] Mixed custom compartments test passed")
             return True
         else:
-            print("✗ Failed to generate valid SVG for mixed compartments")
+            print("[FAIL] Failed to generate valid SVG for mixed compartments")
             return False
     except Exception as e:
-        print(f"✗ Mixed custom compartments test failed: {e}")
+        print(f"[FAIL] Mixed custom compartments test failed: {e}")
         return False
 
 
@@ -459,7 +459,7 @@ def test_calculated_vs_explicit_compartment_output():
         core1.generate_box()
         svg1 = core1.generate_svg()
     except Exception as e:
-        print(f"✗ Failed to generate calculated spacing box: {e}")
+        print(f"[FAIL] Failed to generate calculated spacing box: {e}")
         return False
     
     # Test 2: Box with explicit even spacing (should be identical)
@@ -477,21 +477,21 @@ def test_calculated_vs_explicit_compartment_output():
         core2.generate_box()
         svg2 = core2.generate_svg()
     except Exception as e:
-        print(f"✗ Failed to generate explicit spacing box: {e}")
+        print(f"[FAIL] Failed to generate explicit spacing box: {e}")
         return False
     
     # Compare the SVG outputs
     if not svg1 or not svg2:
-        print("✗ One or both SVGs are empty")
+        print("[FAIL] One or both SVGs are empty")
         return False
     
     # Check that both are valid SVGs
     if '<svg' not in svg1 or '</svg>' not in svg1:
-        print("✗ Calculated spacing produced invalid SVG")
+        print("[FAIL] Calculated spacing produced invalid SVG")
         return False
         
     if '<svg' not in svg2 or '</svg>' not in svg2:
-        print("✗ Explicit spacing produced invalid SVG")
+        print("[FAIL] Explicit spacing produced invalid SVG")
         return False
     
     # For this test, the outputs should be very similar (the paths might have tiny differences due to floating point)
@@ -500,7 +500,7 @@ def test_calculated_vs_explicit_compartment_output():
     svg2_lines = svg2.count('<path')
     
     if abs(svg1_lines - svg2_lines) > 2:  # Allow small differences
-        print(f"✗ Different number of paths: calculated={svg1_lines}, explicit={svg2_lines}")
+        print(f"[FAIL] Different number of paths: calculated={svg1_lines}, explicit={svg2_lines}")
         return False
     
     # Check viewBox dimensions are similar
@@ -520,7 +520,7 @@ def test_calculated_vs_explicit_compartment_output():
     with open('test_results/explicit_compartments_3x3.svg', 'w') as f:
         f.write(svg2)
     
-    print("✓ Calculated vs explicit compartment test passed")
+    print("[PASS] Calculated vs explicit compartment test passed")
     print("  Generated files for comparison:")
     print("    test_results/calculated_compartments_3x3.svg")
     print("    test_results/explicit_compartments_3x3.svg")
@@ -561,14 +561,14 @@ def test_custom_compartment_parsing():
             svg_content = core.generate_svg()
             
             if not ('<svg' in svg_content and '</svg>' in svg_content):
-                print(f"✗ Failed to generate SVG for input: '{input_str}'")
+                print(f"[FAIL] Failed to generate SVG for input: '{input_str}'")
                 return False
                 
         except Exception as e:
-            print(f"✗ Parsing failed for input '{input_str}': {e}")
+            print(f"[FAIL] Parsing failed for input '{input_str}': {e}")
             return False
     
-    print("✓ Custom compartment parsing test passed")
+    print("[PASS] Custom compartment parsing test passed")
     return True
 
 
@@ -605,7 +605,7 @@ def run_all_tests():
     print(f"Test Results: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All tests passed! The refactor was successful.")
+        print("[SUCCESS] All tests passed! The refactor was successful.")
         return True
     else:
         print("❌ Some tests failed. Please check the implementation.")
