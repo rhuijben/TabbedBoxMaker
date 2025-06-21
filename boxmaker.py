@@ -300,25 +300,7 @@ def side(group,root,startOffset,endOffset,tabVec,prevTab,length,direction,isTab,
       Dy=Dy-notDirY*(thickness-kerf)
       h+='L '+str(Dx)+','+str(Dy)+' '
       group.add(getLine(h))
-    # for dividerNumber in range(1,int(numDividers)+1):
-    #   Dx=vectorX+-dirY*dividerSpacing*dividerNumber+notDirX*halfkerf+dirX*dogbone*halfkerf
-    #   Dy=vectorY+dirX*dividerSpacing*dividerNumber-notDirY*halfkerf+dirY*dogbone*halfkerf
-    #   # Dx=vectorX+dirX*dogbone*halfkerf
-    #   # Dy=vectorY+dirX*dividerSpacing*dividerNumber-dirX*halfkerf+dirY*dogbone*halfkerf
-    #   h='M '+str(Dx)+','+str(Dy)+' '
-    #   Dx=rootX+endOffsetX*thickness+dirX*length
-    #   Dy+=dirY*tabWidth+notDirY*firstVec+first*dirY
-    #   h+='L '+str(Dx)+','+str(Dy)+' '
-    #   Dx+=notDirX*(secondVec-kerf)
-    #   Dy+=notDirY*(secondVec+kerf)
-    #   h+='L '+str(Dx)+','+str(Dy)+' '
-    #   Dx-=vectorX
-    #   Dy-=(dirY*tabWidth+notDirY*firstVec+first*dirY)
-    #   h+='L '+str(Dx)+','+str(Dy)+' '
-    #   Dx-=notDirX*(secondVec-kerf)
-    #   Dy-=notDirY*(secondVec+kerf)
-    #   h+='L '+str(Dx)+','+str(Dy)+' '
-    #   group.add(getLine(h))
+   
   group.add(getLine(s))
   return s
 
