@@ -23,9 +23,7 @@ jobs:
         
     - name: Create directories
       run: |
-        mkdir -p test_results
-        mkdir -p test_assets
-        mkdir -p release_validation
+        python -c "import os; os.makedirs('test_results', exist_ok=True); os.makedirs('release_validation', exist_ok=True)"
         
     - name: Run comprehensive tests
       run: |

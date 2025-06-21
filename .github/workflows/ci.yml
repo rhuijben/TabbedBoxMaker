@@ -23,8 +23,7 @@ jobs:
         
     - name: Create test directories
       run: |
-        mkdir -p test_results
-        mkdir -p test_assets
+        python -c "import os; os.makedirs('test_results', exist_ok=True)"
         
     - name: Run test suite
       run: |
@@ -40,12 +39,7 @@ jobs:
       run: |
         echo "🔧 Testing basic CLI functionality..."
         python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --tab 12 --output test_ci.svg
-        if [ -f "test_ci.svg" ]; then
-          echo "✓ CLI generated SVG successfully"
-        else
-          echo "❌ CLI failed to generate SVG"
-          exit 1
-        fi
+        python -c "import os; import sys; print('✓ CLI generated SVG successfully' if os.path.exists('test_ci.svg') else '❌ CLI failed to generate SVG'); sys.exit(0 if os.path.exists('test_ci.svg') else 1)"
         
     - name: Archive test results
       if: always()
@@ -73,8 +67,7 @@ jobs:
         
     - name: Create test directories
       run: |
-        mkdir -p test_results
-        mkdir -p test_assets
+        python -c "import os; os.makedirs('test_results', exist_ok=True)"
         
     - name: Run test suite
       run: |
@@ -104,8 +97,7 @@ jobs:
         
     - name: Create test directories
       run: |
-        mkdir -p test_results
-        mkdir -p test_assets
+        python -c "import os; os.makedirs('test_results', exist_ok=True)"
         
     - name: Run basic test
       run: |
