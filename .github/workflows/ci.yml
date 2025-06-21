@@ -25,9 +25,9 @@ jobs:
       run: |
         python -c "import os; os.makedirs('test_results', exist_ok=True)"
         
-    - name: Run test suite
+    - name: Run comprehensive test suite
       run: |
-        echo "🧪 Running BoxMaker test suite..."
+        echo "🧪 Running comprehensive BoxMaker test suite..."
         python test_boxmaker.py
         
     - name: Run design system tests
@@ -35,19 +35,10 @@ jobs:
         echo "🎨 Running design system tests..."
         python test_design.py
         
-    - name: Run updated core tests
+    - name: Run core functionality tests
       run: |
-        echo "⚙️ Running updated core tests..."
+        echo "⚙️ Running core functionality tests..."
         python test_updated_core.py
-        
-    - name: Run CLI examples
-      run: |
-        echo "🚀 Running CLI examples..."
-        python cli_examples.py
-        
-    - name: Test basic CLI functionality
-      run: |
-        echo "🔧 Testing basic CLI functionality..."
         python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --tab 12 --output test_ci.svg
         python -c "import os; import sys; print('✓ CLI generated SVG successfully' if os.path.exists('test_ci.svg') else '❌ CLI failed to generate SVG'); sys.exit(0 if os.path.exists('test_ci.svg') else 1)"
         
@@ -89,10 +80,10 @@ jobs:
         echo "🎨 Running design system tests with Python 3.11..."
         python test_design.py
         
-    - name: Run CLI examples
+    - name: Run CLI integration tests
       run: |
-        echo "🚀 Running CLI examples with Python 3.11..."
-        python cli_examples.py
+        echo "🚀 Running CLI integration tests with Python 3.11..."
+        python test_cli_integration.py
 
   cross-platform:
     name: Cross-Platform Test

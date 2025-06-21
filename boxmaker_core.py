@@ -1,6 +1,43 @@
 #! /usr/bin/env python -t
 """
-Core BoxMaker functionality - refactored for testability
+BoxMaker Core - Refactored Generation System
+
+This module implements the SVG generation logic for the TabbedBoxMaker Inkscape extension.
+It uses the design system for geometry and applies manufacturing considerations.
+
+ARCHITECTURE:
+============
+
+1. DESIGN-FIRST APPROACH:
+   - Uses BoxDesign class for all geometric calculations
+   - Separates design logic from SVG generation
+   - Enables comprehensive testing and validation
+
+2. KERF COMPENSATION STRATEGY:
+   - Design dimensions are pure geometry (no kerf)
+   - Half-kerf expansion applied to piece perimeters during generation
+   - Tab/slot dimensions compensated for tight fit
+   - No full-kerf addition to piece dimensions (corrected from legacy code)
+
+3. VALIDATION HIERARCHY:
+   - Input validation (dimensions, materials)
+   - Design validation (compartments, layout)
+   - Generation validation (tabs, paths)
+
+4. COMPARTMENT HANDLING:
+   - Strict validation when all custom sizes provided (no auto-fitting)
+   - Auto-fitting only for partial specifications
+   - Clear error messages guide user corrections
+
+5. BOX TYPE SUPPORT:
+   - Wall configuration system supports all box types
+   - Correct dimension calculations for partial boxes
+   - Extensible for future box types
+
+Generated SVG contains:
+- Laser-cut pieces with proper kerf compensation
+- Tab and slot connections for assembly
+- Cut paths optimized for material usage
 """
 
 import math
@@ -69,6 +106,10 @@ class BoxMakerCore:
     
     def _validate_dimensions(self) -> None:
         """Validate box dimensions are within acceptable ranges"""
+        # Get wall configuration to determine which dimensions are critical
+        from box_design import get_wall_configuration
+        wall_config = get_wall_configuration(self.boxtype)
+        
         dimensions = [
             ('length', self.length),
             ('width', self.width), 
@@ -76,8 +117,14 @@ class BoxMakerCore:
         ]
         
         for name, value in dimensions:
-            if value < MIN_DIMENSION:
-                raise DimensionError(name, value, min_val=MIN_DIMENSION)
+            # For height, use relaxed validation if no top panel (since that's what limits clearance)
+            # This allows shallow boxes when there's no top to interfere with contents
+            min_required = MIN_DIMENSION
+            if name == 'height' and not wall_config.has_top:
+                min_required = self.thickness * 2 + 5  # Minimum: 2x thickness + 5mm clearance
+                
+            if value < min_required:
+                raise DimensionError(name, value, min_val=min_required)
             if value > MAX_DIMENSION:
                 raise DimensionError(name, value, max_val=MAX_DIMENSION)
         
@@ -104,12 +151,21 @@ class BoxMakerCore:
             self.log(f"Warning: Tab width ({self.tab}mm) is less than recommended minimum "
                     f"({recommended_min_tab}mm). Tabs may be weak.")
         
-        # Physical constraint: tabs can't be larger than smallest dimension / 3
-        min_dimension = min(self.length, self.width, self.height)
-        max_physical_tab = min_dimension / 3
+        # Physical constraint: tabs can't be larger than smallest relevant dimension / 3
+        # For box types without top/bottom, height doesn't constrain tab size
+        from box_design import get_wall_configuration
+        wall_config = get_wall_configuration(self.boxtype)
+        
+        # Determine which dimensions are relevant for tab constraints
+        relevant_dimensions = [self.length, self.width]  # Length and width always matter for tabs
+        if wall_config.has_top or wall_config.has_bottom:
+            relevant_dimensions.append(self.height)  # Height only matters if we have top/bottom panels
+        
+        min_relevant_dimension = min(relevant_dimensions)
+        max_physical_tab = min_relevant_dimension / 3
         
         if self.tab > max_physical_tab:
-            raise TabError(f"Tab width ({self.tab}mm) is too large for smallest dimension ({min_dimension}mm). "
+            raise TabError(f"Tab width ({self.tab}mm) is too large for smallest relevant dimension ({min_relevant_dimension}mm). "
                           f"Maximum tab width is {max_physical_tab:.1f}mm (dimension/3).")
         
         # Issue warning for unusually large tabs (but allow them for big boxes)
@@ -122,16 +178,16 @@ class BoxMakerCore:
             raise TabError(f"Tab width ({self.tab}mm) is excessively large "
                           f"({self.tab/self.thickness:.1f}x thickness). "
                           f"Consider using smaller tabs for better joint geometry.")
-          # Check if material is too thick for dimensions
-        min_dimension = min(self.length, self.width, self.height)
-        if self.thickness >= min_dimension / 2:
-            raise MaterialError(f"Material thickness ({self.thickness}) is too large for smallest dimension ({min_dimension})")
+          # Check if material is too thick for relevant dimensions
+        # For box types without top/bottom panels, height doesn't constrain material thickness
+        if self.thickness >= min_relevant_dimension / 2:
+            raise MaterialError(f"Material thickness ({self.thickness}) is too large for smallest relevant dimension ({min_relevant_dimension})")
         
         # Check if thickness makes valid tabs impossible
-        max_tab_size = min_dimension / 3
+        max_tab_size = min_relevant_dimension / 3
         if self.thickness > max_tab_size:
             raise MaterialError(f"Material thickness ({self.thickness}) is too large to create valid tabs. "
-                               f"For {min_dimension}mm dimension, max thickness is {max_tab_size:.1f}mm")
+                               f"For {min_relevant_dimension}mm dimension, max thickness is {max_tab_size:.1f}mm")
     
     def log(self, text: str) -> None:
         """Log text to file if SCHROFF_LOG environment variable is set"""

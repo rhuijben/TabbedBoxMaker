@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 """
-Example CLI usage of the BoxMaker
-Demonstrates how to use the boxmaker from command line
+CLI Integration Tests for BoxMaker
+
+This test suite validates the command-line interface by running practical
+examples that cover the main features and use cases. It ensures that:
+
+1. The CLI interface works correctly across different scenarios
+2. All major features can be accessed from command line
+3. Generated SVG files are valid and contain expected content
+4. Error handling works properly for invalid inputs
+
+Used in CI to verify CLI functionality across different Python versions
+and platforms. Each test generates an actual SVG file that could be used
+for laser cutting or CNC milling.
+
+EXAMPLES TESTED:
+- Basic laser cutting box
+- CNC milling box with dogbone cuts  
+- Boxes with dividers
+- Thick material handling
+- Inside vs outside dimensions
+- Different layout styles
+- Custom compartment sizes
+- Mixed compartment configurations
 """
 
 import sys
@@ -31,9 +52,10 @@ def run_example(description, args):
         return False
 
 def main():
-    """Run CLI examples"""
-    print("BoxMaker CLI Examples")
+    """Run CLI integration tests"""
+    print("BoxMaker CLI Integration Tests")
     print("=" * 50)
+    print("Testing CLI interface with practical examples...")
     
     # Ensure test_assets directory exists
     import os
@@ -96,11 +118,11 @@ def main():
         if run_example(example['description'], example['args']):
             success_count += 1
     
-    print(f"\n\nSummary: {success_count}/{len(examples)} examples completed successfully")
+    print(f"\n\nTest Results: {success_count}/{len(examples)} CLI tests passed")
     
     if success_count == len(examples):
-        print("\n🎉 All examples generated successfully!")
-        print("\nGenerated files in test_assets/:")
+        print("\n✅ All CLI integration tests passed!")
+        print("\nGenerated test files in test_assets/:")
         for example in examples:
             output_file = None
             args = example['args']
@@ -110,8 +132,11 @@ def main():
                     break
             if output_file and Path(output_file).exists():
                 print(f"  - {output_file}")
+        return True
     else:
-        print(f"\n❌ {len(examples) - success_count} examples failed")
+        print(f"\n❌ {len(examples) - success_count} CLI tests failed")
+        return False
 
 if __name__ == '__main__':
-    main()
+    success = main()
+    sys.exit(0 if success else 1)

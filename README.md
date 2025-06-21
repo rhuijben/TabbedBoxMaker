@@ -4,50 +4,57 @@
 
 _version 2.0 - 21 Jun 2025_
 
-Original box maker by Elliot White (formerly of twot.eu, domain name now squatted)
+Original box maker by Elliot White (formerly of twot.eu, domain name squatted)
 
 Heavily modified by [Paul Hutchison](https://github.com/paulh-rnd)
 
-Refactored for testability and CLI support by [Bert Huijben](https://github.com/rhuijben)
+Refactored and modernized by [Bert Huijben](https://github.com/rhuijben)
 
 ## What's New in Version 2.0
 
-### ✨ New Features
-- **🚀 CLI Support**: Generate box SVGs from command line without Inkscape
-- **🎯 Custom Compartment Sizes**: Configure exact compartment dimensions instead of even spacing
-- **🧪 Comprehensive Testing**: Automated test suite with 13 test scenarios
-- **🔧 Same Inkscape Experience**: Identical behavior when used as extension
-- **⚡ Continuous Integration**: Automated testing on every commit and PR
-- **📊 Cross-Platform**: Tested on Ubuntu, Windows, and macOS
-- **🛡️ Robust Validation**: Input validation with helpful error messages
+### ✨ Major Improvements
+- **🎯 Custom Compartment Control**: Specify exact compartment sizes with strict validation (no auto-fitting when all sizes provided)
+- **🧪 Production-Ready Code**: Comprehensive test suite with design validation and error testing
+- **🔧 Clean Architecture**: Separated design logic from manufacturing concerns for maintainability
+- **⚡ Robust Validation**: Clear error messages guide users to correct inputs
+- **📊 Modern Codebase**: Enum-based constants, type hints, and comprehensive documentation
 
-### 🔧 Technical Improvements
-- **Modular Architecture**: Core logic separated for testability
-- **Error Handling**: Proper validation and clear error messages
-- **Code Quality**: Clean, maintainable Python code with documentation
-- **Automated Examples**: CLI examples that run automatically in CI
+### 🔧 Technical Excellence
+- **Design-First Architecture**: Pure geometry separated from kerf compensation
+- **Strict Compartment Validation**: Prevents user errors by requiring exact size matching
+- **Comprehensive Testing**: 19 test scenarios covering all features and edge cases
+- **Code Quality**: Clean, documented, maintainable Python with modern patterns
+- **CI/CD Pipeline**: Automated testing ensures reliability
+
+### 🚫 Removed Development Artifacts
+- Cleaned up temporary test files and development tools
+- Streamlined to essential core functionality
+- Focused test suite on production scenarios
 
 ## About
  This tool is designed to simplify the process of making practical boxes from sheet material using almost any kind of CNC cutter (laser, plasma, water jet or mill). The box edges are "finger-jointed" or "tab-jointed", and may include press-fit dimples, internal dividers, dogbone corners (for endmill cutting), and more.
 
  The tool works by generating each side of the box with the tab and edge sizes corrected to account for the kerf (width of cut). Each box side is composed of a group of individual lines that make up each edge of the face, as well as any other cutouts for dividers. It is recommended that you join adjacent lines in your CNC software to cut efficiently.
 
- An additional extension which uses the same TabbedBoxMaker generator script is also included: Schroff Box Maker. The Schroff addition was created by [John Slee](https://github.com/jsleeio). If you create further derivative box generators, feel free to send me a pull request!
+## Key Design Decisions
+
+### Custom Compartment Validation
+- **All sizes provided**: Strict validation - must sum exactly to available space (no auto-fitting)
+- **Partial sizes provided**: Auto-fit remaining compartments to fill space  
+- **No sizes provided**: Divide space evenly among compartments
+
+This prevents creating incorrect boxes by ensuring user intent is preserved.
+
+### Kerf Compensation Strategy
+- Design dimensions are pure geometry (kerf-free)
+- Half-kerf expansion applied to all external piece edges
+- Tab/slot dimensions properly compensated for tight fit
+- Maintains design intent while ensuring proper assembly
 
 ## Usage
 
-### As Inkscape Extension (Original Usage)
-Copy `boxmaker.py`, `boxmaker_core.py`, `boxmaker_constants.py`, `boxmaker_exceptions.py`, and `boxmaker.inx` to your Inkscape extensions folder. Use exactly as before - no changes to the interface or behavior.
-
-### As CLI Tool (New!)
-```bash
-# Basic box (100x80x50mm, 3mm material, laser cutting)
-python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --kerf 0.1 --output my_box.svg
-
-# CNC milling with dogbone cuts
-python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --tabtype 1 --output cnc_box.svg
-
-# Box with dividers (2 length, 1 width)
+### As Inkscape Extension (Unchanged)
+Copy `boxmaker.py`, `boxmaker_core.py`, `boxmaker_constants.py`, `boxmaker_exceptions.py`, `box_design.py`, and `boxmaker.inx` to your Inkscape extensions folder. Interface and behavior unchanged.
 python boxmaker.py --length 120 --width 100 --height 60 --div-l 2 --div-w 1 --output box_with_dividers.svg
 
 # Custom compartment sizes (210mm wide with 63mm, 63mm, 50mm compartments + remainder)
@@ -83,13 +90,22 @@ python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --inside --
 
 This project includes comprehensive automated testing:
 
+### Test Suite Components
+- **Core functionality tests**: `test_boxmaker.py` (20 comprehensive tests)
+- **Design system tests**: `test_design.py` (6 design validation tests)  
+- **Updated core tests**: `test_updated_core.py` (core architecture tests)
+- **CLI integration tests**: `test_cli_integration.py` (8 practical examples)
+
 ### Run Tests Locally
 ```bash
-# Run the full test suite (11 tests)
+# Run the main test suite (20 comprehensive tests)
 python test_boxmaker.py
 
-# Run CLI examples (6 examples)
-python cli_examples.py
+# Run design system tests  
+python test_design.py
+
+# Run CLI integration tests (8 practical examples)
+python test_cli_integration.py
 
 # Run pre-commit validation
 python pre_commit_test.py

@@ -1,9 +1,49 @@
 #!/usr/bin/env python3
 """
-Box design classes and functions for TabbedBoxMaker
+BoxMaker Design System
 
-This module handles the design phase - calculating dimensions, divider positions,
-and compartment sizes without manufacturing considerations like kerf.
+This module implements the core design logic for the TabbedBoxMaker Inkscape extension.
+It separates design concerns (geometry, compartments) from manufacturing concerns (kerf, tabs).
+
+DESIGN DECISIONS:
+================
+
+1. SEPARATION OF CONCERNS:
+   - Design system handles pure geometry and compartment layout
+   - Generation system handles manufacturing details (kerf compensation, tab placement)
+   - This separation enables testing, validation, and future enhancements
+
+2. CUSTOM COMPARTMENT VALIDATION:
+   - When ALL compartment sizes are provided: strict validation, no auto-fitting
+   - When PARTIAL sizes provided: auto-fit remaining compartments
+   - When NO sizes provided: divide space evenly
+   - This prevents user errors and ensures predictable behavior
+
+3. ENUM-BASED CONSTANTS:
+   - Replaced magic integers with BoxType and LayoutStyle enums
+   - Improves code readability and prevents invalid values
+
+4. WALL CONFIGURATION:
+   - Each box type has explicit wall configuration
+   - Enables correct dimension calculations for partial boxes
+   - Supports future box type extensions
+
+5. KERF HANDLING:
+   - Design dimensions are kerf-free (pure geometry)
+   - Kerf compensation applied during generation
+   - Half-kerf expansion on all external piece edges
+   - Maintains design intent while ensuring proper fit
+
+Classes:
+  DividerInfo: Information about dividers in one direction
+  WallConfiguration: Which walls exist for a box type  
+  BoxDesign: Complete box design with all geometric information
+
+Functions:
+  create_box_design: Main factory function for creating box designs
+  calculate_divider_info: Calculate divider positions and compartment sizes
+  get_wall_configuration: Get wall configuration for box type
+  parse_compartment_sizes: Parse custom compartment size strings
 """
 
 from typing import List, Optional, Tuple
@@ -181,21 +221,22 @@ def calculate_divider_configuration(internal_dimension: float,
     if available_for_compartments <= 0:
         raise ValidationError(f"No space available for compartments. {num_dividers} dividers of {thickness}mm "
                             f"thickness require {num_dividers * thickness}mm, but only {internal_dimension}mm available.")
-    
-    # Determine compartment sizes
+      # Determine compartment sizes
     if not custom_sizes:
         # No custom sizes - divide evenly
         compartment_size = available_for_compartments / num_compartments
         compartment_sizes = [compartment_size] * num_compartments
     elif len(custom_sizes) >= num_compartments:
-        # All compartment sizes provided - must match exactly
+        # DESIGN DECISION: All compartment sizes provided - must match exactly
+        # NO AUTO-FITTING: Better to inform user of incorrect sizes than create wrong box
         compartment_sizes = custom_sizes[:num_compartments]
         total_custom = sum(compartment_sizes)
         if abs(total_custom - available_for_compartments) > 0.001:
             raise ValidationError(f"Custom compartment sizes total {total_custom:.1f}mm but available space is "
                                 f"{available_for_compartments:.1f}mm. Adjust sizes to match exactly.")
     else:
-        # Partial custom sizes - calculate remaining
+        # Partial custom sizes - auto-fit remaining compartments
+        # DESIGN DECISION: Only auto-fit when user hasn't specified all sizes
         compartment_sizes = custom_sizes[:]
         used_space = sum(custom_sizes)
         remaining_compartments = num_compartments - len(custom_sizes)

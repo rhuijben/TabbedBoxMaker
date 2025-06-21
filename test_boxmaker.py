@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from boxmaker_core import BoxMakerCore
 from boxmaker_exceptions import DimensionError, TabError, MaterialError, ValidationError
+from boxmaker_constants import BoxType
 
 
 def test_basic_box():
@@ -618,6 +619,304 @@ def test_custom_compartment_parsing():
     return True
 
 
+def test_dividers_with_kerf():
+    """Test that dividers work correctly with kerf compensation"""
+    print("Testing dividers with kerf compensation...")
+    
+    # Test box with dividers and kerf
+    core = BoxMakerCore()
+    core.set_parameters(
+        length=120.0, width=100.0, height=60.0,
+        thickness=3.0, kerf=0.2, tab=15.0,
+        div_l=2, div_w=1,  # 2 dividers along length, 1 along width
+        tabtype=0  # Laser
+    )
+    
+    try:
+        result = core.generate_box()
+          # Check that design has correct divider information
+        assert len(core.design.length_dividers.positions) == 2, "Should have 2 length dividers"
+        assert len(core.design.width_dividers.positions) == 1, "Should have 1 width divider"
+        
+        # Check that divider positions are reasonable (not affected by kerf)
+        length_positions = core.design.length_dividers.positions
+        width_positions = core.design.width_dividers.positions
+          # For 120mm length with 2 dividers, expecting positions around 37.33mm and 74.67mm  
+        assert 35 < length_positions[0] < 40, f"First length divider at {length_positions[0]}, expected ~37"
+        assert 72 < length_positions[1] < 77, f"Second length divider at {length_positions[1]}, expected ~75"
+        
+        # For 100mm width with 1 divider, expecting position around 50mm
+        assert 45 < width_positions[0] < 55, f"Width divider at {width_positions[0]}, expected ~50"
+        
+        # Generate SVG to ensure no errors with kerf
+        svg_content = core.generate_svg()
+        assert '<svg' in svg_content and '</svg>' in svg_content
+        assert len(svg_content) > 1000, "Should generate substantial content with dividers"
+        
+        print(f"✓ Dividers with kerf: {len(length_positions)} length + {len(width_positions)} width")
+        print(f"✓ Length positions: {[f'{pos:.1f}' for pos in length_positions]}")
+        print(f"✓ Width positions: {[f'{pos:.1f}' for pos in width_positions]}")
+        
+        print("[PASS] Dividers with kerf test passed")
+        return True
+        
+    except Exception as e:
+        print(f"[FAIL] Dividers with kerf test failed: {e}")
+        return False
+
+
+def test_custom_compartments_with_kerf():
+    """Test custom compartment sizes with kerf compensation"""
+    print("Testing custom compartments with kerf...")
+    
+    # Test with custom compartment sizes and kerf
+    core = BoxMakerCore()
+    core.set_parameters(
+        length=150.0, width=120.0, height=60.0,
+        thickness=3.0, kerf=0.15, tab=15.0,
+        div_l=2,  # 2 dividers = 3 compartments
+        div_l_custom="42; 50; 46",  # Custom sizes (total=138, available=138)
+        tabtype=0
+    )
+    
+    try:
+        result = core.generate_box()
+        
+        # Check that custom compartments are correctly parsed
+        compartments = core.design.length_dividers.compartment_sizes
+        assert len(compartments) == 3, f"Should have 3 compartments, got {len(compartments)}"
+        assert abs(compartments[0] - 42.0) < 0.1, f"First compartment should be 42mm, got {compartments[0]}"
+        assert abs(compartments[1] - 50.0) < 0.1, f"Second compartment should be 50mm, got {compartments[1]}"
+        assert abs(compartments[2] - 46.0) < 0.1, f"Third compartment should be 46mm, got {compartments[2]}"
+        
+        # Check divider positions are correct for custom compartments
+        positions = core.design.length_dividers.positions
+        assert len(positions) == 2, f"Should have 2 dividers, got {len(positions)}"
+        
+        # First divider should be at first compartment size
+        assert abs(positions[0] - 42.0) < 0.1, f"First divider at {positions[0]}, expected 42"
+        # Second divider should be at first + second compartment sizes + divider thickness
+        assert abs(positions[1] - 95.0) < 0.1, f"Second divider at {positions[1]}, expected 95"
+        
+        # Verify kerf doesn't affect the design dimensions
+        assert core.design.length_external == 150.0, "Design length should be unchanged by kerf"
+        
+        # Generate SVG with custom compartments and kerf
+        svg_content = core.generate_svg()
+        assert '<svg' in svg_content and '</svg>' in svg_content
+        
+        print(f"✓ Custom compartments: {compartments}")
+        print(f"✓ Divider positions: {[f'{pos:.1f}' for pos in positions]}")
+        
+        # Test that invalid compartment sizes are rejected (user should know what's wrong)
+        print("  Testing rejection of invalid compartment sizes...")
+        core_invalid = BoxMakerCore()
+        core_invalid.set_parameters(
+            length=150.0, width=120.0, height=60.0,
+            thickness=3.0, kerf=0.15, tab=15.0,
+            div_l=2,  # 2 dividers = 3 compartments, available space = 138mm
+            div_l_custom="50; 60; 50",  # Total=160mm > 138mm available - should fail
+            tabtype=0
+        )
+        
+        try:
+            core_invalid.generate_box()
+            assert False, "Should have failed with oversized compartments"
+        except ValidationError as e:
+            print(f"  ✓ Correctly rejected invalid sizes: {e}")
+        
+        print("[PASS] Custom compartments with kerf test passed")
+        return True
+        
+    except Exception as e:
+        print(f"[FAIL] Custom compartments with kerf test failed: {e}")
+        return False
+
+
+def test_dividers_kerf_comparison():
+    """Compare divider output with and without kerf to verify correct compensation"""
+    print("Testing divider kerf compensation comparison...")
+    
+    # Test parameters
+    length, width, height = 100.0, 80.0, 50.0
+    thickness = 3.0
+    kerf = 0.2
+    
+    # Box with dividers, no kerf
+    core_no_kerf = BoxMakerCore()
+    core_no_kerf.set_parameters(
+        length=length, width=width, height=height,
+        thickness=thickness, kerf=0.0, tab=15.0,
+        div_l=1, div_w=1,  # Simple 1x1 divider setup
+        tabtype=0
+    )
+    
+    # Box with dividers, with kerf
+    core_with_kerf = BoxMakerCore()
+    core_with_kerf.set_parameters(
+        length=length, width=width, height=height,
+        thickness=thickness, kerf=kerf, tab=15.0,
+        div_l=1, div_w=1,  # Same divider setup
+        tabtype=0
+    )
+    
+    try:
+        result_no_kerf = core_no_kerf.generate_box()
+        result_with_kerf = core_with_kerf.generate_box()
+          # Design should be identical regardless of kerf
+        assert core_no_kerf.design.length_dividers.positions == core_with_kerf.design.length_dividers.positions
+        assert core_no_kerf.design.width_dividers.positions == core_with_kerf.design.width_dividers.positions
+        
+        # Both should generate paths successfully
+        assert len(result_no_kerf['paths']) > 0, "No kerf version should generate paths"
+        assert len(result_with_kerf['paths']) > 0, "With kerf version should generate paths"
+        
+        # Path counts should be the same (same number of pieces and dividers)
+        assert len(result_no_kerf['paths']) == len(result_with_kerf['paths']), \
+            f"Path counts differ: {len(result_no_kerf['paths'])} vs {len(result_with_kerf['paths'])}"
+        
+        # Generate SVGs to ensure both work
+        svg_no_kerf = core_no_kerf.generate_svg()
+        svg_with_kerf = core_with_kerf.generate_svg()
+        
+        assert '<svg' in svg_no_kerf and '</svg>' in svg_no_kerf
+        assert '<svg' in svg_with_kerf and '</svg>' in svg_with_kerf
+        
+        # SVGs should be different due to kerf compensation
+        assert svg_no_kerf != svg_with_kerf, "SVGs should differ due to kerf compensation"
+        
+        print(f"✓ Design consistency: divider positions unchanged by kerf")
+        print(f"✓ Path generation: both versions generate {len(result_no_kerf['paths'])} paths")
+        print(f"✓ Kerf effect: SVG output differs as expected")
+        
+        print("[PASS] Divider kerf comparison test passed")
+        return True
+        
+    except Exception as e:
+        print(f"[FAIL] Divider kerf comparison test failed: {e}")
+        return False
+
+
+def test_complex_custom_compartments_with_kerf():
+    """Test complex custom compartment configurations with kerf"""
+    print("Testing complex custom compartments with kerf...")
+    
+    # Calculate available spaces:
+    # Length: 180 - 2*3 (walls) - 3*3 (dividers) = 165mm
+    # Width: 140 - 2*3 (walls) - 2*3 (dividers) = 128mm
+    
+    # Test with both length and width custom compartments
+    core = BoxMakerCore()
+    core.set_parameters(
+        length=180.0, width=140.0, height=60.0,
+        thickness=3.0, kerf=0.25, tab=15.0,
+        div_l=3,  # 3 dividers = 4 compartments along length
+        div_w=2,  # 2 dividers = 3 compartments along width
+        div_l_custom="40; 50; 40; 35",  # 4 custom length compartments (total=165, available=165)
+        div_w_custom="40; 45; 43",      # 3 custom width compartments (total=128, available=128)
+        tabtype=0
+    )
+    
+    try:
+        result = core.generate_box()
+        
+        # Check length compartments - should match exactly as specified
+        length_compartments = core.design.length_dividers.compartment_sizes
+        assert len(length_compartments) == 4, f"Should have 4 length compartments, got {len(length_compartments)}"
+        
+        expected_length = [40.0, 50.0, 40.0, 35.0]
+        for i, (actual, expected) in enumerate(zip(length_compartments, expected_length)):
+            assert abs(actual - expected) < 0.1, f"Length compartment {i}: {actual} != {expected}"
+        
+        # Check width compartments - should match exactly as specified
+        width_compartments = core.design.width_dividers.compartment_sizes
+        assert len(width_compartments) == 3, f"Should have 3 width compartments, got {len(width_compartments)}"
+        
+        expected_width = [40.0, 45.0, 43.0]
+        for i, (actual, expected) in enumerate(zip(width_compartments, expected_width)):
+            assert abs(actual - expected) < 0.1, f"Width compartment {i}: {actual} != {expected}"
+        
+        # Check divider positions
+        length_positions = core.design.length_dividers.positions
+        width_positions = core.design.width_dividers.positions
+        
+        assert len(length_positions) == 3, f"Should have 3 length dividers, got {len(length_positions)}"
+        assert len(width_positions) == 2, f"Should have 2 width dividers, got {len(width_positions)}"
+        
+        # Verify cumulative positions (compartment + divider thickness)
+        assert abs(length_positions[0] - 40.0) < 0.1, f"First length divider: {length_positions[0]} != 40"
+        assert abs(length_positions[1] - 93.0) < 0.1, f"Second length divider: {length_positions[1]} != 93"  # 40+50+3
+        assert abs(length_positions[2] - 136.0) < 0.1, f"Third length divider: {length_positions[2]} != 136"  # 40+50+40+3+3
+        
+        assert abs(width_positions[0] - 40.0) < 0.1, f"First width divider: {width_positions[0]} != 40"
+        assert abs(width_positions[1] - 88.0) < 0.1, f"Second width divider: {width_positions[1]} != 88"  # 40+45+3
+        
+        # Generate SVG with complex setup
+        svg_content = core.generate_svg()
+        assert '<svg' in svg_content and '</svg>' in svg_content
+        assert len(svg_content) > 2000, "Should generate substantial content with many dividers"
+        
+        print(f"✓ Length compartments: {[f'{x:.1f}' for x in length_compartments]}")
+        print(f"✓ Width compartments: {[f'{x:.1f}' for x in width_compartments]}")
+        print(f"✓ Length divider positions: {[f'{x:.1f}' for x in length_positions]}")
+        print(f"✓ Width divider positions: {[f'{x:.1f}' for x in width_positions]}")
+        
+        # Test that oversized compartments are properly rejected (no auto-fitting)
+        print("  Testing rejection of oversized compartments...")
+        core_invalid = BoxMakerCore()
+        core_invalid.set_parameters(
+            length=180.0, width=140.0, height=60.0,
+            thickness=3.0, kerf=0.25, tab=15.0,
+            div_l=3,  # Available space = 165mm
+            div_l_custom="50; 60; 50; 40",  # Total=200mm > 165mm available - should fail
+            tabtype=0
+        )
+        
+        try:
+            core_invalid.generate_box()
+            assert False, "Should have failed with oversized compartments"
+        except ValidationError as e:
+            print(f"  ✓ Correctly rejected oversized compartments: {e}")
+        
+        print("[PASS] Complex custom compartments with kerf test passed")
+        return True
+        
+    except Exception as e:
+        print(f"[FAIL] Complex custom compartments with kerf test failed: {e}")
+        return False
+
+
+def test_shallow_open_box():
+    """Test that shallow boxes work when there's no top panel"""
+    print("Testing shallow open box (height validation fix)...")
+    
+    core = BoxMakerCore()
+    core.set_parameters(
+        length=220.0,
+        width=206.0,
+        height=18.0,  # Below normal 40mm minimum, but should work for no-top boxes
+        thickness=3.0,
+        kerf=0.1,
+        tab=6.0,
+        boxtype=BoxType.NO_TOP,  # One side open (LxW) - no top
+        tabtype=0  # Laser
+    )
+    
+    try:
+        result = core.generate_box()
+        svg_content = core.generate_svg()
+        
+        if '<svg' in svg_content and '</svg>' in svg_content and len(result['paths']) > 0:
+            print(f"[PASS] Shallow open box test passed (height={core.height}mm)")
+            return True
+        else:
+            print("[FAIL] Failed to generate valid output for shallow open box")
+            return False
+    except Exception as e:
+        print(f"[FAIL] Shallow open box test failed: {e}")
+        return False
+
+
 def run_all_tests():
     """Run all tests"""
     print("Running BoxMaker tests...\n")
@@ -637,7 +936,12 @@ def run_all_tests():
         test_custom_compartment_sizes,
         test_mixed_custom_compartments,
         test_calculated_vs_explicit_compartment_output,
-        test_custom_compartment_parsing
+        test_custom_compartment_parsing,
+        test_dividers_with_kerf,
+        test_custom_compartments_with_kerf,
+        test_dividers_kerf_comparison,
+        test_complex_custom_compartments_with_kerf,
+        test_shallow_open_box
     ]
     
     passed = 0
