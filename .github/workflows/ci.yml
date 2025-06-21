@@ -30,6 +30,16 @@ jobs:
         echo "🧪 Running BoxMaker test suite..."
         python test_boxmaker.py
         
+    - name: Run design system tests
+      run: |
+        echo "🎨 Running design system tests..."
+        python test_design.py
+        
+    - name: Run updated core tests
+      run: |
+        echo "⚙️ Running updated core tests..."
+        python test_updated_core.py
+        
     - name: Run CLI examples
       run: |
         echo "🚀 Running CLI examples..."
@@ -74,6 +84,11 @@ jobs:
         echo "🧪 Running BoxMaker test suite with Python 3.11..."
         python test_boxmaker.py
         
+    - name: Run design system tests
+      run: |
+        echo "🎨 Running design system tests with Python 3.11..."
+        python test_design.py
+        
     - name: Run CLI examples
       run: |
         echo "🚀 Running CLI examples with Python 3.11..."
@@ -108,6 +123,11 @@ jobs:
       run: |
         echo "🧪 Running basic test on ${{ matrix.os }}..."
         python test_boxmaker.py
+        
+    - name: Run design tests
+      run: |
+        echo "🎨 Running design tests on ${{ matrix.os }}..."
+        python test_design.py
         
     - name: Test CLI
       run: |

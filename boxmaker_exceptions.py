@@ -34,3 +34,8 @@ class TabError(BoxMakerError):
 class MaterialError(BoxMakerError):
     """Raised when material thickness configuration is invalid"""
     pass
+
+
+class ValidationError(BoxMakerError):
+    """Raised when design validation fails"""
+    pass

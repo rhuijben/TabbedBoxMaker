@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from boxmaker_core import BoxMakerCore
-from boxmaker_exceptions import DimensionError, TabError, MaterialError
+from boxmaker_exceptions import DimensionError, TabError, MaterialError, ValidationError
 
 
 def test_basic_box():
@@ -528,44 +528,90 @@ def test_calculated_vs_explicit_compartment_output():
 
 
 def test_custom_compartment_parsing():
-    """Test parsing of custom compartment sizes with different decimal separators"""
+    """Test parsing of custom compartment sizes with strict validation"""
     print("Testing custom compartment parsing...")
     
-    from boxmaker_core import BoxMakerCore
-    
-    # Test various decimal separator combinations
+    # Test cases with proper sizing for a 200x150x50 box (3mm thickness, no kerf at design stage)
+    # Internal dimensions: 194mm length x 144mm width  
+    # For 2 dividers (3 compartments): available space = 194 - 2*3 = 188mm
     test_cases = [
-        ("63,5; 63.0; 50", [63.5, 63.0, 50.0]),  # Mixed comma and dot
-        ("63.5;50,0;75", [63.5, 50.0, 75.0]),    # Dot and comma mixed
-        ("60; 70; 80.5", [60.0, 70.0, 80.5]),    # All dots with spaces
-        ("100", [100.0]),                         # Single value
-        ("50,5", [50.5]),                         # Single value with comma
-        ("", []),                                 # Empty string
-        ("  63.0  ;  70,5  ;  80  ", [63.0, 70.5, 80.0])  # Extra whitespace
+        # Case 1: Exact fit - all compartments specified (total = 188mm)
+        ("60; 65; 63", [60.0, 65.0, 63.0], 2, "All compartments fit exactly"),
+        
+        # Case 2: Partial specification - let system calculate remainder  
+        ("60; 65", [60.0, 65.0], 2, "First two specified, third calculated"),
+        
+        # Case 3: Single compartment specified
+        ("80", [80.0], 2, "Only first compartment specified"),
+        
+        # Case 4: Different decimal separators (total = 188mm)
+        ("60.5; 64.5; 63", [60.5, 64.5, 63.0], 2, "Mixed decimal separators"),
+        
+        # Case 5: No custom sizes - even distribution
+        ("", [], 2, "No custom sizes - even distribution"),
+        
+        # Case 6: Single divider (2 compartments) - available space = 194 - 1*3 = 191mm
+        ("90; 101", [90.0, 101.0], 1, "Two compartments with one divider"),
+        
+        # Case 7: Whitespace handling (total = 188mm)
+        ("  60  ;  65  ;  63  ", [60.0, 65.0, 63.0], 2, "Extra whitespace"),
     ]
     
     core = BoxMakerCore()
     
-    for input_str, expected in test_cases:
+    for input_str, expected_sizes, num_dividers, description in test_cases:
         try:
-            # Use a simple box setup to test parsing
+            print(f"  Testing: {description}")
+            print(f"    Input: '{input_str}' with {num_dividers} dividers")
+            
             core.set_parameters(
                 length=200, width=150, height=50,
                 thickness=3, tab=15,
-                div_l=len(expected) if expected else 0,
-                div_l_custom=input_str
+                div_l=num_dividers,
+                div_l_custom=input_str,
+                inside=False  # Use outside dimensions for predictable internal space
             )
             
-            # Just check that it doesn't crash - the actual parsing logic is tested in the core
+            # Generate the box to test the actual implementation
             core.generate_box()
             svg_content = core.generate_svg()
             
             if not ('<svg' in svg_content and '</svg>' in svg_content):
-                print(f"[FAIL] Failed to generate SVG for input: '{input_str}'")
+                print(f"    [FAIL] Failed to generate SVG")
                 return False
                 
+            print(f"    [PASS] Generated successfully")
+                
         except Exception as e:
-            print(f"[FAIL] Parsing failed for input '{input_str}': {e}")
+            print(f"    [FAIL] Error: {e}")
+            return False
+    
+    # Test error cases - sizes that don't fit
+    print("  Testing error cases:")
+    
+    error_cases = [
+        ("100; 100; 100", 2, "Compartments too large (300mm > 188mm available)"),
+        ("200", 1, "Single compartment too large (200mm > 191mm available)"),
+    ]
+    
+    for input_str, num_dividers, description in error_cases:
+        try:
+            print(f"    Testing: {description}")
+            core.set_parameters(
+                length=200, width=150, height=50,
+                thickness=3, tab=15,
+                div_l=num_dividers,
+                div_l_custom=input_str,
+                inside=False            )
+            
+            core.generate_box()
+            print(f"    [FAIL] Should have failed but didn't: {description}")
+            return False
+            
+        except ValidationError as e:
+            print(f"    [PASS] Correctly rejected: {description}")
+        except Exception as e:
+            print(f"    [FAIL] Wrong error type: {e}")
             return False
     
     print("[PASS] Custom compartment parsing test passed")

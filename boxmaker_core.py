@@ -20,6 +20,7 @@ from boxmaker_constants import (
     INCHES_TO_MM, HAIRLINE_THICKNESS_INCHES
 )
 from boxmaker_exceptions import DimensionError, TabError, MaterialError
+from box_design import BoxDesign, create_box_design, get_wall_configuration
 
 
 class BoxMakerCore:
@@ -54,6 +55,7 @@ class BoxMakerCore:
         self.linethickness = 1
         self.paths: List[str] = []
         self.circles: List[Tuple[float, Tuple[float, float]]] = []
+        self.design: Optional[BoxDesign] = None  # Will hold the calculated design
         
     def set_parameters(self, **kwargs) -> None:
         """Set box parameters from keyword arguments
@@ -270,8 +272,9 @@ class BoxMakerCore:
                     firstholelenX = holeLenX
                     firstholelenY = holeLenY
                 for dividerNumber in range(1, int(numDividers) + 1):
-                    Dx = vectorX + -dirY * dividerSpacing * dividerNumber + notDirX * self.halfkerf + dirX * self.dogbone * self.halfkerf - self.dogbone * first * dirX
-                    Dy = vectorY + dirX * dividerSpacing * dividerNumber - notDirY * self.halfkerf + dirY * self.dogbone * self.halfkerf - self.dogbone * first * dirY
+                    divider_pos = self._get_divider_position(dividerSpacing, dividerNumber)
+                    Dx = vectorX + -dirY * divider_pos + notDirX * self.halfkerf + dirX * self.dogbone * self.halfkerf - self.dogbone * first * dirX
+                    Dy = vectorY + dirX * divider_pos - notDirY * self.halfkerf + dirY * self.dogbone * self.halfkerf - self.dogbone * first * dirY
                     if tabDivision == 1 and self.tabSymmetry == 0:
                         Dx += startOffsetX * self.thickness
                     h = 'M ' + str(Dx) + ',' + str(Dy) + ' '
@@ -292,8 +295,9 @@ class BoxMakerCore:
             if tabDivision % 2:
                 if tabDivision == 1 and numDividers > 0 and isDivider: # draw slots for dividers to slot into each other
                     for dividerNumber in range(1, int(numDividers) + 1):
-                        Dx = vectorX + -dirY * dividerSpacing * dividerNumber - dividerEdgeOffsetX + notDirX * self.halfkerf
-                        Dy = vectorY + dirX * dividerSpacing * dividerNumber - dividerEdgeOffsetY + notDirY * self.halfkerf
+                        divider_pos = self._get_divider_position(dividerSpacing, dividerNumber)
+                        Dx = vectorX + -dirY * divider_pos - dividerEdgeOffsetX + notDirX * self.halfkerf
+                        Dy = vectorY + dirX * divider_pos - dividerEdgeOffsetY + notDirY * self.halfkerf
                         h = 'M ' + str(Dx) + ',' + str(Dy) + ' '
                         Dx = Dx + dirX * (first + length / 2)
                         Dy = Dy + dirY * (first + length / 2)
@@ -353,8 +357,9 @@ class BoxMakerCore:
 
         if isTab and numDividers > 0 and self.tabSymmetry == 0 and not isDivider: # draw last for divider joints in side walls
             for dividerNumber in range(1, int(numDividers) + 1):
-                Dx = vectorX + -dirY * dividerSpacing * dividerNumber + notDirX * self.halfkerf + dirX * self.dogbone * self.halfkerf - self.dogbone * first * dirX
-                Dy = vectorY + dirX * dividerSpacing * dividerNumber - dividerEdgeOffsetY + notDirY * self.halfkerf
+                divider_pos = self._get_divider_position(dividerSpacing, dividerNumber)
+                Dx = vectorX + -dirY * divider_pos + notDirX * self.halfkerf + dirX * self.dogbone * self.halfkerf - self.dogbone * first * dirX
+                Dy = vectorY + dirX * divider_pos - dividerEdgeOffsetY + notDirY * self.halfkerf
                 h = 'M ' + str(Dx) + ',' + str(Dy) + ' '
                 Dx = Dx + firstholelenX
                 Dy = Dy + firstholelenY
@@ -384,6 +389,21 @@ class BoxMakerCore:
         # Validate input parameters first
         self._validate_dimensions()
         
+        # Create the box design (no manufacturing adjustments like kerf)
+        self.design = create_box_design(
+            length=self.length,
+            width=self.width,
+            height=self.height,
+            thickness=self.thickness,
+            inside=self.inside,
+            div_l=self.div_l,
+            div_w=self.div_w,
+            div_l_custom=self.div_l_custom,
+            div_w_custom=self.div_w_custom,
+            box_type=BoxType(self.boxtype),     # Convert int to enum
+            style=LayoutStyle(self.style)       # Convert int to enum
+        )
+        
         # Clear previous paths
         self.paths = []
         self.circles = []
@@ -396,12 +416,10 @@ class BoxMakerCore:
         self.dimpleLength = self.dimplelength
         self.halfkerf = self.kerf / 2
         self.dogbone = 1 if self.tabtype == TabType.CNC else 0
+        
+        # Legacy variables for compatibility with existing drawing code
         self.divx = self.div_l
         self.divy = self.div_w
-        
-        # Parse custom compartment sizes if provided
-        self.custom_l_sizes = self._parse_compartment_sizes(self.div_l_custom) if self.div_l_custom else []
-        self.custom_w_sizes = self._parse_compartment_sizes(self.div_w_custom) if self.div_w_custom else []
         
         self.keydivwalls = 0 if self.keydiv == 3 or self.keydiv == 1 else 1
         self.keydivfloor = 0 if self.keydiv == 3 or self.keydiv == 2 else 1
@@ -412,32 +430,24 @@ class BoxMakerCore:
         else:
             self.linethickness = 1
 
-        # Get dimensions (assuming mm units for simplicity)
-        X = self.length + self.kerf
-        Y = self.width + self.kerf
-        Z = self.height + self.kerf
-
-        if self.inside:  # if inside dimension selected correct values to outside dimension
-            X += self.thickness * 2
-            Y += self.thickness * 2
-            Z += self.thickness * 2        # Note: Validation is now handled by _validate_dimensions()
+        # Use the design dimensions and apply kerf for manufacturing
+        X = self.design.length_external + self.kerf
+        Y = self.design.width_external + self.kerf
+        Z = self.design.height_external + self.kerf
+        
         if self.kerf > min(X, Y, Z) / 3:
             raise ValueError('Error: Kerf too large')
         if self.spacing < self.kerf:
             raise ValueError('Error: Spacing too small')
 
-        # Determine which faces the box has based on the box type
-        hasTp = hasBm = hasFt = hasBk = hasLt = hasRt = True
-        if self.boxtype == 2:
-            hasTp = False
-        elif self.boxtype == 3:
-            hasTp = hasFt = False
-        elif self.boxtype == 4:
-            hasTp = hasFt = hasRt = False
-        elif self.boxtype == 5:
-            hasTp = hasBm = False
-        elif self.boxtype == 6:
-            hasTp = hasFt = hasBk = hasRt = False
+        # Get wall configuration from the design
+        wall_config = get_wall_configuration(BoxType(self.boxtype))
+        hasTp = wall_config.has_top
+        hasBm = wall_config.has_bottom
+        hasFt = wall_config.has_front
+        hasBk = wall_config.has_back
+        hasLt = wall_config.has_left
+        hasRt = wall_config.has_right
 
         # Determine where the tabs go based on the tab style
         if self.tabSymmetry == 2:     # Antisymmetric (deprecated)
@@ -618,27 +628,9 @@ class BoxMakerCore:
             ctabs = tabbed >> 1 & 1
             dtabs = tabbed & 1
             
-            # Calculate spacing based on custom sizes or even distribution
-            internal_x = X - self.thickness  # Internal width for dividers
-            internal_y = Y - self.thickness  # Internal length for dividers
-            
-            if self.custom_w_sizes and self.divy > 0:
-                # Custom spacing for width dividers
-                x_positions = self._calculate_divider_positions(internal_x, self.custom_w_sizes, self.divy)
-                x_spacings = self._get_custom_spacing(internal_x, x_positions)
-                xspacing = x_spacings[0] if x_spacings else internal_x / (self.divy + 1)
-            else:
-                # Even spacing for width dividers
-                xspacing = internal_x / (self.divy + 1)
-                
-            if self.custom_l_sizes and self.divx > 0:
-                # Custom spacing for length dividers  
-                y_positions = self._calculate_divider_positions(internal_y, self.custom_l_sizes, self.divx)
-                y_spacings = self._get_custom_spacing(internal_y, y_positions)
-                yspacing = y_spacings[0] if y_spacings else internal_y / (self.divx + 1)
-            else:
-                # Even spacing for length dividers
-                yspacing = internal_y / (self.divx + 1)
+            # Use divider positions from the design
+            y_divider_positions = self.design.length_dividers.positions  # Length direction positions
+            x_divider_positions = self.design.width_dividers.positions   # Width direction positions
                 
             xholes = 1 if piece[6] < 3 else 0
             yholes = 1 if piece[6] != 2 else 0
@@ -648,16 +640,16 @@ class BoxMakerCore:
             group_id = f"panel_{idx}"
 
             # Generate and draw the sides of each piece
-            self.side(group_id, (x, y), (d, a), (-b, a), atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * atabs, yspacing)
-            self.side(group_id, (x + dx, y), (-b, a), (-b, -c), btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * btabs, xspacing)
+            self.side(group_id, (x, y), (d, a), (-b, a), atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * atabs, y_divider_positions)
+            self.side(group_id, (x + dx, y), (-b, a), (-b, -c), btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * btabs, x_divider_positions)
             if atabs:
-                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, 0, 0)
+                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, 0, [])
             else:
-                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * ctabs, yspacing)
+                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * ctabs, y_divider_positions)
             if btabs:
-                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, 0, 0)
+                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, 0, [])
             else:
-                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * dtabs, xspacing)
+                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * dtabs, x_divider_positions)
 
             # Handle dividers if this is the first piece (template)
             if idx == 0:
@@ -673,19 +665,19 @@ class BoxMakerCore:
                 for n in range(0, self.divx):  # generate X dividers
                     x = n * (self.spacing + X)  # root x co-ord for piece
                     group_id = f"x_divider_{n}"
-                    self.side(group_id, (x, y), (d, a), (-b, a), self.keydivfloor * atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 1, 0, 0)
-                    self.side(group_id, (x + dx, y), (-b, a), (-b, -c), self.keydivwalls * btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 1, self.divy * xholes, xspacing)
-                    self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), self.keydivfloor * ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 1, 0, 0)
-                    self.side(group_id, (x, y + dy), (d, -c), (d, a), self.keydivwalls * dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 1, 0, 0)
+                    self.side(group_id, (x, y), (d, a), (-b, a), self.keydivfloor * atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 1, 0, [])
+                    self.side(group_id, (x + dx, y), (-b, a), (-b, -c), self.keydivwalls * btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 1, self.divy * xholes, x_divider_positions)
+                    self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), self.keydivfloor * ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 1, 0, [])
+                    self.side(group_id, (x, y + dy), (d, -c), (d, a), self.keydivwalls * dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 1, 0, [])
             elif idx == 1:
                 y = 5 * self.spacing + 1 * Y + 3 * Z  # root y co-ord for piece
                 for n in range(0, self.divy):  # generate Y dividers
                     x = n * (self.spacing + Z)  # root x co-ord for piece
                     group_id = f"y_divider_{n}"
-                    self.side(group_id, (x, y), (d, a), (-b, a), self.keydivwalls * atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 1, self.divx * yholes, yspacing)
-                    self.side(group_id, (x + dx, y), (-b, a), (-b, -c), self.keydivfloor * btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 1, 0, 0)
-                    self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), self.keydivwalls * ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 1, 0, 0)
-                    self.side(group_id, (x, y + dy), (d, -c), (d, a), self.keydivfloor * dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 1, 0, 0)
+                    self.side(group_id, (x, y), (d, a), (-b, a), self.keydivwalls * atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 1, self.divx * yholes, y_divider_positions)
+                    self.side(group_id, (x + dx, y), (-b, a), (-b, -c), self.keydivfloor * btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 1, 0, [])
+                    self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), self.keydivwalls * ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 1, 0, [])
+                    self.side(group_id, (x, y + dy), (d, -c), (d, a), self.keydivfloor * dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 1, 0, [])
 
         return {
             'paths': self.paths,
@@ -762,104 +754,22 @@ class BoxMakerCore:
         
         return svg_content
 
-    def _parse_compartment_sizes(self, size_string: str) -> List[float]:
-        """Parse compartment size string into list of floats
+    def _get_divider_position(self, dividerPositions, dividerNumber: int) -> float:
+        """Get the position of a specific divider
         
         Args:
-            size_string: String like "63,0; 63.0 ; 50" with sizes separated by semicolons
+            dividerPositions: List of divider positions from the design
+            dividerNumber: The divider number (1-based)
             
         Returns:
-            List of compartment sizes in mm
-            
-        Raises:
-            ValueError: If string format is invalid
+            The position of the divider
         """
-        if not size_string or not size_string.strip():
-            return []
-            
-        sizes = []
-        # Split by semicolon and process each size
-        for size_str in size_string.split(';'):
-            size_str = size_str.strip()
-            if not size_str:
-                continue
-                
-            # Replace comma with dot for European decimal separator
-            size_str = size_str.replace(',', '.')
-            
-            try:
-                size = float(size_str)
-                if size < 0:
-                    raise ValueError(f"Compartment size cannot be negative: {size}")
-                sizes.append(size)
-            except ValueError as e:
-                raise ValueError(f"Invalid compartment size '{size_str}': {e}")
-                
-        return sizes
-    
-    def _calculate_divider_positions(self, total_dimension: float, custom_sizes: List[float], 
-                                   num_dividers: int) -> List[float]:
-        """Calculate divider positions based on custom compartment sizes
-        
-        Args:
-            total_dimension: Total internal dimension (X or Y minus thickness)
-            custom_sizes: List of custom compartment sizes
-            num_dividers: Number of dividers
-            
-        Returns:
-            List of divider positions from start
-        """
-        if not custom_sizes:
-            # Fall back to even spacing
-            spacing = total_dimension / (num_dividers + 1)
-            return [spacing * (i + 1) for i in range(num_dividers)]
-        
-        # Calculate positions based on custom sizes
-        positions = []
-        current_pos = 0
-        
-        for i in range(num_dividers):
-            if i < len(custom_sizes):
-                # Use custom size
-                compartment_size = custom_sizes[i]
+        if isinstance(dividerPositions, list) and len(dividerPositions) > 0:
+            # New design system - use pre-calculated positions
+            if dividerNumber <= len(dividerPositions):
+                return dividerPositions[dividerNumber - 1]  # Convert to 0-based index
             else:
-                # Calculate remaining space divided by remaining compartments
-                remaining_dividers = num_dividers - i
-                remaining_compartments = remaining_dividers + 1
-                remaining_space = total_dimension - current_pos
-                compartment_size = remaining_space / remaining_compartments
-                
-            current_pos += compartment_size
-            
-            # Ensure we don't go beyond the total dimension
-            if current_pos >= total_dimension:
-                current_pos = total_dimension * (i + 1) / (num_dividers + 1)
-                
-            positions.append(current_pos)
-            
-        return positions
-
-    def _get_custom_spacing(self, total_dimension: float, positions: List[float]) -> List[float]:
-        """Calculate spacing between dividers for custom positions
-        
-        Args:
-            total_dimension: Total internal dimension  
-            positions: List of divider positions
-            
-        Returns:
-            List of spacing values between dividers
-        """
-        if not positions:
-            return []
-            
-        spacings = []
-        prev_pos = 0
-        
-        for pos in positions:
-            spacings.append(pos - prev_pos)
-            prev_pos = pos
-            
-        # Add final spacing to end
-        spacings.append(total_dimension - prev_pos)
-        
-        return spacings
+                return 0  # No divider at this position
+        else:
+            # No dividers or empty list
+            return 0
