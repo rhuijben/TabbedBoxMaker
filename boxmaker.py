@@ -68,8 +68,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 __version__ = "1.2" ### please report bugs, suggestions etc at https://github.com/paulh-rnd/TabbedBoxMaker ###
 
-import os,sys,inkex,simplestyle,gettext,math
+import os,sys,math
 from copy import deepcopy
+import gettext
+
+# Try to import inkex, fall back to mock if not available
+try:
+    import inkex
+    import simplestyle
+    INKSCAPE_AVAILABLE = True
+except ImportError:
+    # Import our mock module for CLI usage
+    from mock_inkex import setup_mock_environment
+    setup_mock_environment()
+    import inkex
+    simplestyle = None
+    INKSCAPE_AVAILABLE = False
+
 _ = gettext.gettext
 
 linethickness = 1 # default unless overridden by settings
@@ -306,133 +321,181 @@ def side(group,root,startOffset,endOffset,tabVec,prevTab,length,direction,isTab,
 
 
 class BoxMaker(inkex.Effect):
-  def __init__(self):
-      # Call the base class constructor.
-      inkex.Effect.__init__(self)
-      # Define options
-      self.arg_parser.add_argument('--schroff',action='store',type=int,
-        dest='schroff',default=0,help='Enable Schroff mode')
-      self.arg_parser.add_argument('--rail_height',action='store',type=float,
-        dest='rail_height',default=10.0,help='Height of rail')
-      self.arg_parser.add_argument('--rail_mount_depth',action='store',type=float,
-        dest='rail_mount_depth',default=17.4,help='Depth at which to place hole for rail mount bolt')
-      self.arg_parser.add_argument('--rail_mount_centre_offset',action='store',type=float,
-        dest='rail_mount_centre_offset',default=0.0,help='How far toward row centreline to offset rail mount bolt (from rail centreline)')
-      self.arg_parser.add_argument('--rows',action='store',type=int,
-        dest='rows',default=0,help='Number of Schroff rows')
-      self.arg_parser.add_argument('--hp',action='store',type=int,
-        dest='hp',default=0,help='Width (TE/HP units) of Schroff rows')
-      self.arg_parser.add_argument('--row_spacing',action='store',type=float,
-        dest='row_spacing',default=10.0,help='Height of rail')
-      self.arg_parser.add_argument('--unit',action='store',type=str,
-        dest='unit',default='mm',help='Measure Units')
-      self.arg_parser.add_argument('--inside',action='store',type=int,
-        dest='inside',default=0,help='Int/Ext Dimension')
-      self.arg_parser.add_argument('--length',action='store',type=float,
-        dest='length',default=100,help='Length of Box')
-      self.arg_parser.add_argument('--width',action='store',type=float,
-        dest='width',default=100,help='Width of Box')
-      self.arg_parser.add_argument('--depth',action='store',type=float,
-        dest='height',default=100,help='Height of Box')
-      self.arg_parser.add_argument('--tab',action='store',type=float,
-        dest='tab',default=25,help='Nominal Tab Width')
-      self.arg_parser.add_argument('--equal',action='store',type=int,
-        dest='equal',default=0,help='Equal/Prop Tabs')
-      self.arg_parser.add_argument('--tabsymmetry',action='store',type=int,
-        dest='tabsymmetry',default=0,help='Tab style')
-      self.arg_parser.add_argument('--tabtype',action='store',type=int,
-        dest='tabtype',default=0,help='Tab type: regular or dogbone')
-      self.arg_parser.add_argument('--dimpleheight',action='store',type=float,
-        dest='dimpleheight',default=0,help='Tab Dimple Height')
-      self.arg_parser.add_argument('--dimplelength',action='store',type=float,
-        dest='dimplelength',default=0,help='Tab Dimple Tip Length')
-      self.arg_parser.add_argument('--hairline',action='store',type=int,
-        dest='hairline',default=0,help='Line Thickness')
-      self.arg_parser.add_argument('--thickness',action='store',type=float,
-        dest='thickness',default=10,help='Thickness of Material')
-      self.arg_parser.add_argument('--kerf',action='store',type=float,
-        dest='kerf',default=0.5,help='Kerf (width of cut)')
-      self.arg_parser.add_argument('--style',action='store',type=int,
-        dest='style',default=25,help='Layout/Style')
-      self.arg_parser.add_argument('--spacing',action='store',type=float,
-        dest='spacing',default=25,help='Part Spacing')
-      self.arg_parser.add_argument('--boxtype',action='store',type=int,
-        dest='boxtype',default=25,help='Box type')
-      self.arg_parser.add_argument('--div_l',action='store',type=int,
-        dest='div_l',default=25,help='Dividers (Length axis)')
-      self.arg_parser.add_argument('--div_w',action='store',type=int,
-        dest='div_w',default=25,help='Dividers (Width axis)')
-      self.arg_parser.add_argument('--keydiv',action='store',type=int,
-        dest='keydiv',default=3,help='Key dividers into walls/floor')
-      self.arg_parser.add_argument('--optimize',action='store',type=inkex.utils.Boolean,
-        dest='optimize',default=True,help='Optimize paths')
+    def __init__(self):
+        # Call the base class constructor.
+        inkex.Effect.__init__(self)
+        # Define options
+        self.arg_parser.add_argument('--schroff',action='store',type=int,
+          dest='schroff',default=0,help='Enable Schroff mode')
+        self.arg_parser.add_argument('--rail_height',action='store',type=float,
+          dest='rail_height',default=10.0,help='Height of rail')
+        self.arg_parser.add_argument('--rail_mount_depth',action='store',type=float,
+          dest='rail_mount_depth',default=17.4,help='Depth at which to place hole for rail mount bolt')
+        self.arg_parser.add_argument('--rail_mount_centre_offset',action='store',type=float,
+          dest='rail_mount_centre_offset',default=0.0,help='How far toward row centreline to offset rail mount bolt (from rail centreline)')
+        self.arg_parser.add_argument('--rows',action='store',type=int,
+          dest='rows',default=0,help='Number of Schroff rows')
+        self.arg_parser.add_argument('--hp',action='store',type=int,
+          dest='hp',default=0,help='Width (TE/HP units) of Schroff rows')
+        self.arg_parser.add_argument('--row_spacing',action='store',type=float,
+          dest='row_spacing',default=10.0,help='Height of rail')
+        self.arg_parser.add_argument('--unit',action='store',type=str,
+          dest='unit',default='mm',help='Measure Units')
+        self.arg_parser.add_argument('--inside',action='store',type=int,
+          dest='inside',default=0,help='Int/Ext Dimension')
+        self.arg_parser.add_argument('--length',action='store',type=float,
+          dest='length',default=100,help='Length of Box')
+        self.arg_parser.add_argument('--width',action='store',type=float,
+          dest='width',default=100,help='Width of Box')
+        self.arg_parser.add_argument('--depth',action='store',type=float,
+          dest='height',default=100,help='Height of Box')
+        self.arg_parser.add_argument('--tab',action='store',type=float,
+          dest='tab',default=25,help='Nominal Tab Width')
+        self.arg_parser.add_argument('--equal',action='store',type=int,
+          dest='equal',default=0,help='Equal/Prop Tabs')
+        self.arg_parser.add_argument('--tabsymmetry',action='store',type=int,
+          dest='tabsymmetry',default=0,help='Tab style')
+        self.arg_parser.add_argument('--tabtype',action='store',type=int,
+          dest='tabtype',default=0,help='Tab type: regular or dogbone')
+        self.arg_parser.add_argument('--dimpleheight',action='store',type=float,
+          dest='dimpleheight',default=0,help='Tab Dimple Height')
+        self.arg_parser.add_argument('--dimplelength',action='store',type=float,
+          dest='dimplelength',default=0,help='Tab Dimple Tip Length')
+        self.arg_parser.add_argument('--hairline',action='store',type=int,
+          dest='hairline',default=0,help='Line Thickness')
+        self.arg_parser.add_argument('--thickness',action='store',type=float,
+          dest='thickness',default=10,help='Thickness of Material')
+        self.arg_parser.add_argument('--kerf',action='store',type=float,
+          dest='kerf',default=0.5,help='Kerf (width of cut)')
+        self.arg_parser.add_argument('--style',action='store',type=int,
+          dest='style',default=25,help='Layout/Style')
+        self.arg_parser.add_argument('--spacing',action='store',type=float,
+          dest='spacing',default=25,help='Part Spacing')
+        self.arg_parser.add_argument('--boxtype',action='store',type=int,
+          dest='boxtype',default=25,help='Box type')
+        self.arg_parser.add_argument('--div_l',action='store',type=int,
+          dest='div_l',default=25,help='Dividers (Length axis)')
+        self.arg_parser.add_argument('--div_w',action='store',type=int,
+          dest='div_w',default=25,help='Dividers (Width axis)')
+        self.arg_parser.add_argument('--keydiv',action='store',type=int,
+          dest='keydiv',default=3,help='Key dividers into walls/floor')
+        self.arg_parser.add_argument('--optimize',action='store',type=inkex.utils.Boolean,
+          dest='optimize',default=True,help='Optimize paths')
+        self.arg_parser.add_argument('--div_l_custom', action='store', type=str,
+          dest='div_l_custom', default='', help='Custom divider widths (Length axis)')
+        self.arg_parser.add_argument('--div_w_custom', action='store', type=str,
+          dest='div_w_custom', default='', help='Custom divider widths (Width axis)')
 
-  def effect(self):
-    global group,nomTab,equalTabs,tabSymmetry,dimpleHeight,dimpleLength,thickness,kerf,halfkerf,dogbone,divx,divy,hairline,linethickness,keydivwalls,keydivfloor
-    
-        # Get access to main SVG document element and get its dimensions.
-    svg = self.document.getroot()
-    
-        # Get the attributes:
-    widthDoc  = self.svg.unittouu(svg.get('width'))
-    heightDoc = self.svg.unittouu(svg.get('height'))
-    
-    # Get script's option values.
-    hairline=self.options.hairline
-    unit=self.options.unit
-    inside=self.options.inside
-    schroff=self.options.schroff
-    kerf = self.svg.unittouu( str(self.options.kerf)  + unit )
-    halfkerf=kerf/2
-
-    # Set the line thickness
-    if hairline:
-        linethickness=self.svg.unittouu('0.002in')
-    else:
-        linethickness=1
+    def _create_mock_svg(self):
+        """Create a mock SVG document for standalone CLI usage."""
+        class MockSVGRoot:
+            def __init__(self):
+                self.attrib = {'width': '300mm', 'height': '200mm'}
+                self.children = []
+                
+            def get(self, attr, default=None):
+                return self.attrib.get(attr, default)
+                
+            def set(self, attr, value):
+                self.attrib[attr] = value
+                
+            def append(self, element):
+                self.children.append(element)
+                
+        return MockSVGRoot()
         
-    if schroff:
-        rows=self.options.rows
-        rail_height=self.svg.unittouu(str(self.options.rail_height)+unit)
-        row_centre_spacing=self.svg.unittouu(str(122.5)+unit)
-        row_spacing=self.svg.unittouu(str(self.options.row_spacing)+unit)
-        rail_mount_depth=self.svg.unittouu(str(self.options.rail_mount_depth)+unit)
-        rail_mount_centre_offset=self.svg.unittouu(str(self.options.rail_mount_centre_offset)+unit)
-        rail_mount_radius=self.svg.unittouu(str(2.5)+unit)
-    
-    ## minimally different behaviour for schroffmaker.inx vs. boxmaker.inx
-    ## essentially schroffmaker.inx is just an alternate interface with different
-    ## default settings, some options removed, and a tiny amount of extra logic
-    if schroff:
-        ## schroffmaker.inx
-        X = self.svg.unittouu(str(self.options.hp * 5.08) + unit)
-        # 122.5mm vertical distance between mounting hole centres of 3U Schroff panels
-        row_height = rows * (row_centre_spacing + rail_height)
-        # rail spacing in between rows but never between rows and case panels
-        row_spacing_total = (rows - 1) * row_spacing
-        Y = row_height + row_spacing_total
-    else:
-        ## boxmaker.inx
-        X = self.svg.unittouu( str(self.options.length + self.options.kerf)  + unit )
-        Y = self.svg.unittouu( str(self.options.width + self.options.kerf) + unit )
+    def _setup_mock_layer(self):
+        """Set up mock layer for CLI usage."""
+        class MockLayer:
+            def __init__(self):
+                self.children = []
+                self.svg_parent = None
+                
+            def add(self, element):
+                self.children.append(element)
+                return element
+                
+        if not hasattr(self.svg, 'get_current_layer'):
+            layer = MockLayer()
+            layer.svg_parent = self.svg
+            self.svg.get_current_layer = lambda: layer
+            
+        if not hasattr(self.svg, 'get_unique_id'):
+            id_counter = [0]
+            def get_unique_id(prefix):
+                id_counter[0] += 1
+                return f"{prefix}{id_counter[0]}"
+            self.svg.get_unique_id = get_unique_id
 
-    Z = self.svg.unittouu( str(self.options.height + self.options.kerf)  + unit )
-    thickness = self.svg.unittouu( str(self.options.thickness)  + unit )
-    nomTab = self.svg.unittouu( str(self.options.tab) + unit )
-    equalTabs=self.options.equal
-    tabSymmetry=self.options.tabsymmetry
-    dimpleHeight=self.svg.unittouu( str(self.options.dimpleheight) + unit )
-    dimpleLength=self.svg.unittouu( str(self.options.dimplelength) + unit )
-    dogbone = 1 if self.options.tabtype == 1 else 0
-    layout=self.options.style
-    spacing = self.svg.unittouu( str(self.options.spacing)  + unit )
-    boxtype = self.options.boxtype
-    divx = self.options.div_l
-    divy = self.options.div_w
-    keydivwalls = 0 if self.options.keydiv == 3 or self.options.keydiv == 1 else 1
-    keydivfloor = 0 if self.options.keydiv == 3 or self.options.keydiv == 2 else 1
-    initOffsetX=0
-    initOffsetY=0
+    def effect(self):
+      global group,nomTab,equalTabs,tabSymmetry,dimpleHeight,dimpleLength,thickness,kerf,halfkerf,dogbone,divx,divy,hairline,linethickness,keydivwalls,keydivfloor
+    
+      # Get access to main SVG document element and get its dimensions.
+      svg = self.document.getroot() if self.document else self._create_mock_svg()
+      # Get the attributes:
+      widthDoc  = self.svg.unittouu(svg.get('width', '100mm'))
+      heightDoc = self.svg.unittouu(svg.get('height', '100mm'))
+      
+      # Set up mock layer if needed
+      if not self.document:
+          self._setup_mock_layer()
+    
+      # Get script's option values.
+      hairline=self.options.hairline
+      unit=self.options.unit
+      inside=self.options.inside
+      schroff=self.options.schroff
+      kerf = self.svg.unittouu( str(self.options.kerf)  + unit )
+      halfkerf=kerf/2
+
+      # Set the line thickness
+      if hairline:
+          linethickness=self.svg.unittouu('0.002in')
+      else:
+          linethickness=1
+          
+      if schroff:
+          rows=self.options.rows
+          rail_height=self.svg.unittouu(str(self.options.rail_height)+unit)
+          row_centre_spacing=self.svg.unittouu(str(122.5)+unit)
+          row_spacing=self.svg.unittouu(str(self.options.row_spacing)+unit)
+          rail_mount_depth=self.svg.unittouu(str(self.options.rail_mount_depth)+unit)
+          rail_mount_centre_offset=self.svg.unittouu(str(self.options.rail_mount_centre_offset)+unit)
+          rail_mount_radius=self.svg.unittouu(str(2.5)+unit)
+      
+      ## minimally different behaviour for schroffmaker.inx vs. boxmaker.inx
+      ## essentially schroffmaker.inx is just an alternate interface with different
+      ## default settings, some options removed, and a tiny amount of extra logic
+      if schroff:
+          ## schroffmaker.inx
+          X = self.svg.unittouu(str(self.options.hp * 5.08) + unit)
+          # 122.5mm vertical distance between mounting hole centres of 3U Schroff panels
+          row_height = rows * (row_centre_spacing + rail_height)
+          # rail spacing in between rows but never between rows and case panels
+          row_spacing_total = (rows - 1) * row_spacing
+          Y = row_height + row_spacing_total
+      else:
+          ## boxmaker.inx
+          X = self.svg.unittouu( str(self.options.length + self.options.kerf)  + unit )
+          Y = self.svg.unittouu( str(self.options.width + self.options.kerf) + unit )
+
+      Z = self.svg.unittouu( str(self.options.height + self.options.kerf)  + unit )
+      thickness = self.svg.unittouu( str(self.options.thickness)  + unit )
+      nomTab = self.svg.unittouu( str(self.options.tab) + unit )
+      equalTabs=self.options.equal
+      tabSymmetry=self.options.tabsymmetry
+      dimpleHeight=self.svg.unittouu( str(self.options.dimpleheight) + unit )
+      dimpleLength=self.svg.unittouu( str(self.options.dimplelength) + unit )
+      dogbone = 1 if self.options.tabtype == 1 else 0
+      layout=self.options.style
+      spacing = self.svg.unittouu( str(self.options.spacing)  + unit )
+      boxtype = self.options.boxtype
+      divx = self.options.div_l
+      divy = self.options.div_w
+      keydivwalls = 0 if self.options.keydiv == 3 or self.options.keydiv == 1 else 1
+      keydivfloor = 0 if self.options.keydiv == 3 or self.options.keydiv == 2 else 1
+      initOffsetX=0
+      initOffsetY=0
         
     if inside: # if inside dimension selected correct values to outside dimension
       X+=thickness*2
@@ -442,14 +505,15 @@ class BoxMaker(inkex.Effect):
     # check input values mainly to avoid python errors
     # TODO restrict values to *correct* solutions
     # TODO restrict divisions to logical values
-    error=0
+      error=0
     
-    if min(X,Y,Z)==0:
-      inkex.errormsg(_('Error: Dimensions must be non zero'))
-      error=1
-    if max(X,Y,Z)>max(widthDoc,heightDoc)*10: # crude test
-      inkex.errormsg(_('Error: Dimensions Too Large'))
-      error=1
+      if min(X,Y,Z)==0:
+        inkex.errormsg(_('Error: Dimensions must be non zero'))
+        error=1
+      # When running standalone, there's no document size to check against
+      if hasattr(self, 'document') and max(X,Y,Z)>max(widthDoc,heightDoc)*10: # crude test
+        inkex.errormsg(_('Error: Dimensions Too Large'))
+        error=1
     if min(X,Y,Z)<3*nomTab:
       inkex.errormsg(_('Error: Tab size too large'))
       error=1
@@ -626,6 +690,47 @@ class BoxMaker(inkex.Effect):
       if hasRt: pieces.append([cc[3], rr[0], Z,Y, rtTabInfo, rtTabbed, rtFace])
       if hasFt: pieces.append([cc[5], rr[0], X,Z, ftTabInfo, ftTabbed, ftFace])
 
+      # Parse custom compartment widths (spaces between dividers), not divider widths
+      def parse_compartment_widths(val):
+          if not val:
+              return None
+          # Only use semicolon as separator, allow whitespace, and handle EU/US decimal separators
+          parts = []
+          for raw in val.split(';'):
+              s = raw.strip()
+              if not s:
+                  continue
+              # If both ',' and '.' in string, assume ',' is decimal (EU), '.' is decimal (US)
+              # If only ',' in string, treat as decimal separator (EU style)
+              if ',' in s and '.' not in s:
+                  s = s.replace(',', '.')
+              try:
+                  parts.append(float(s))
+              except ValueError:
+                  continue
+          return parts if parts else None
+
+      divx_custom = parse_compartment_widths(getattr(self.options, 'div_l_custom', ''))
+      divy_custom = parse_compartment_widths(getattr(self.options, 'div_w_custom', ''))
+
+      # When generating divider positions, use custom compartment widths if provided
+      if divx_custom:
+          yspacing_list = [self.svg.unittouu(str(val) + unit) for val in divx_custom]
+          if len(yspacing_list) != divx:
+              inkex.errormsg(_('Error: Number of custom length compartment widths does not match number of dividers'))
+              exit()
+      else:
+          yspacing = (Y - thickness) / (divx + 1) if divx > 0 else 0
+          yspacing_list = [yspacing] * divx
+      if divy_custom:
+          xspacing_list = [self.svg.unittouu(str(val) + unit) for val in divy_custom]
+          if len(xspacing_list) != divy:
+              inkex.errormsg(_('Error: Number of custom width compartment widths does not match number of dividers'))
+              exit()
+      else:
+          xspacing = (X - thickness) / (divy + 1) if divy > 0 else 0
+          xspacing_list = [xspacing] * divy
+
     for idx, piece in enumerate(pieces): # generate and draw each piece of the box
       (xs,xx,xy,xz)=piece[0]
       (ys,yx,yy,yz)=piece[1]
@@ -637,8 +742,6 @@ class BoxMaker(inkex.Effect):
       a=tabs>>3&1; b=tabs>>2&1; c=tabs>>1&1; d=tabs&1 # extract tab status for each side
       tabbed=piece[5]
       atabs=tabbed>>3&1; btabs=tabbed>>2&1; ctabs=tabbed>>1&1; dtabs=tabbed&1 # extract tabbed flag for each side
-      xspacing=(X-thickness)/(divy+1)
-      yspacing=(Y-thickness)/(divx+1)
       xholes = 1 if piece[6]<3 else 0
       yholes = 1 if piece[6]!=2 else 0
       wall = 1 if piece[6]>1 else 0
@@ -679,45 +782,47 @@ class BoxMaker(inkex.Effect):
             rystart+=row_centre_spacing+row_spacing+rail_height
 
       # generate and draw the sides of each piece
-      side(group,(x,y),(d,a),(-b,a),atabs * (-thickness if a else thickness),dtabs,dx,(1,0),a,0,(keydivfloor|wall) * (keydivwalls|floor) * divx*yholes*atabs,yspacing)          # side a
-      side(group,(x+dx,y),(-b,a),(-b,-c),btabs * (thickness if b else -thickness),atabs,dy,(0,1),b,0,(keydivfloor|wall) * (keydivwalls|floor) * divy*xholes*btabs,xspacing)     # side b
+      side(group,(x,y),(d,a),(-b,a),atabs * (-thickness if a else thickness),dtabs,dx,(1,0),a,0,(keydivfloor|wall) * (keydivwalls|floor) * divx*yholes*atabs,(yspacing_list[0] if yspacing_list else 0))          # side a
+      side(group,(x+dx,y),(-b,a),(-b,-c),btabs * (thickness if b else -thickness),atabs,dy,(0,1),b,0,(keydivfloor|wall) * (keydivwalls|floor) * divy*xholes*btabs,(xspacing_list[0] if xspacing_list else 0))     # side b
       if atabs:
         side(group,(x+dx,y+dy),(-b,-c),(d,-c),ctabs * (thickness if c else -thickness),btabs,dx,(-1,0),c,0,0,0) # side c
       else:
-        side(group,(x+dx,y+dy),(-b,-c),(d,-c),ctabs * (thickness if c else -thickness),btabs,dx,(-1,0),c,0,(keydivfloor|wall) * (keydivwalls|floor) * divx*yholes*ctabs,yspacing) # side c
+        side(group,(x+dx,y+dy),(-b,-c),(d,-c),ctabs * (thickness if c else -thickness),btabs,dx,(-1,0),c,0,(keydivfloor|wall) * (keydivwalls|floor) * divx*yholes*ctabs,(yspacing_list[0] if yspacing_list else 0)) # side c
       if btabs:
         side(group,(x,y+dy),(d,-c),(d,a),dtabs * (-thickness if d else thickness),ctabs,dy,(0,-1),d,0,0,0)      # side d
       else:
-        side(group,(x,y+dy),(d,-c),(d,a),dtabs * (-thickness if d else thickness),ctabs,dy,(0,-1),d,0,(keydivfloor|wall) * (keydivwalls|floor) * divy*xholes*dtabs,xspacing)      # side d
+        side(group,(x,y+dy),(d,-c),(d,a),dtabs * (-thickness if d else thickness),ctabs,dy,(0,-1),d,0,(keydivfloor|wall) * (keydivwalls|floor) * divy*xholes*dtabs,(xspacing_list[0] if xspacing_list else 0))      # side d
 
+      # --- Divider placement with custom spacing ---
       if idx==0:
-        # remove tabs from dividers if not required
-        if not keydivfloor:
-          a=c=1
-          atabs=ctabs=0
-        if not keydivwalls:
-          b=d=1 
-          btabs=dtabs=0
-
-        y=4*spacing+1*Y+2*Z  # root y co-ord for piece 
-        for n in range(0,divx): # generate X dividers
-          subGroup = newGroup(self)
-          groups.append(subGroup)
-          x=n*(spacing+X)  # root x co-ord for piece      
-          side(subGroup,(x,y),(d,a),(-b,a),keydivfloor*atabs*(-thickness if a else thickness),dtabs,dx,(1,0),a,1,0,0)          # side a
-          side(subGroup,(x+dx,y),(-b,a),(-b,-c),keydivwalls*btabs*(thickness if b else -thickness),atabs,dy,(0,1),b,1,divy*xholes,xspacing)    # side b
-          side(subGroup,(x+dx,y+dy),(-b,-c),(d,-c),keydivfloor*ctabs*(thickness if c else -thickness),btabs,dx,(-1,0),c,1,0,0) # side c
-          side(subGroup,(x,y+dy),(d,-c),(d,a),keydivwalls*dtabs*(-thickness if d else thickness),ctabs,dy,(0,-1),d,1,0,0)      # side d
+        # X dividers (length axis)
+        if divx > 0:
+            y_offset = 0
+            for n in range(0, divx):
+                y_offset += yspacing_list[n]
+                # Each divider is offset by n*thickness for previous dividers
+                divider_pos = y + y_offset + n * thickness
+                subGroup = newGroup(self)
+                groups.append(subGroup)
+                x_div = n*(spacing+X)  # root x co-ord for piece (unchanged)
+                side(subGroup,(x_div,divider_pos),(d,a),(-b,a),keydivfloor*atabs*(-thickness if a else thickness),dtabs,dx,(1,0),a,1,0,0)
+                side(subGroup,(x_div+dx,divider_pos),(-b,a),(-b,-c),keydivwalls*btabs*(thickness if b else -thickness),atabs,dy,(0,1),b,1,divy*xholes,(xspacing_list[0] if xspacing_list else 0))
+                side(subGroup,(x_div+dx,divider_pos+dy),(-b,-c),(d,-c),keydivfloor*ctabs*(thickness if c else -thickness),btabs,dx,(-1,0),c,1,0,0)
+                side(subGroup,(x_div,divider_pos+dy),(d,-c),(d,a),keydivwalls*dtabs*(-thickness if d else thickness),ctabs,dy,(0,-1),d,1,0,0)
       elif idx==1:
-        y=5*spacing+1*Y+3*Z  # root y co-ord for piece 
-        for n in range(0,divy): # generate Y dividers
-          subGroup = newGroup(self)
-          groups.append(subGroup)
-          x=n*(spacing+Z)  # root x co-ord for piece
-          side(subGroup,(x,y),(d,a),(-b,a),keydivwalls*atabs*(-thickness if a else thickness),dtabs,dx,(1,0),a,1,divx*yholes,yspacing)          # side a
-          side(subGroup,(x+dx,y),(-b,a),(-b,-c),keydivfloor*btabs*(thickness if b else -thickness),atabs,dy,(0,1),b,1,0,0)     # side b
-          side(subGroup,(x+dx,y+dy),(-b,-c),(d,-c),keydivwalls*ctabs*(thickness if c else -thickness),btabs,dx,(-1,0),c,1,0,0) # side c
-          side(subGroup,(x,y+dy),(d,-c),(d,a),keydivfloor*dtabs*(-thickness if d else thickness),ctabs,dy,(0,-1),d,1,0,0)      # side d
+        # Y dividers (width axis)
+        if divy > 0:
+            x_offset = 0
+            for n in range(0, divy):
+                x_offset += xspacing_list[n]
+                divider_pos = x + x_offset + n * thickness
+                subGroup = newGroup(self)
+                groups.append(subGroup)
+                x_div = n*(spacing+Z)  # root x co-ord for piece (unchanged)
+                side(subGroup,(divider_pos,y),(d,a),(-b,a),keydivwalls*atabs*(-thickness if a else thickness),dtabs,dx,(1,0),a,1,divx*yholes,(yspacing_list[0] if yspacing_list else 0))
+                side(subGroup,(divider_pos+dx,y),(-b,a),(-b,-c),keydivfloor*btabs*(thickness if b else -thickness),atabs,dy,(0,1),b,1,0,0)
+                side(subGroup,(divider_pos+dx,y+dy),(-b,-c),(d,-c),keydivwalls*ctabs*(thickness if c else -thickness),btabs,dx,(-1,0),c,1,0,0)
+                side(subGroup,(divider_pos,y+dy),(d,-c),(d,a),keydivfloor*dtabs*(-thickness if d else thickness),ctabs,dy,(0,-1),d,1,0,0)
 
       if self.options.optimize:
         # Step 1: Combine paths to form the outer boundary
@@ -797,7 +902,7 @@ class BoxMaker(inkex.Effect):
                           simplified_path.append(segment)
                           current_dir = direction
                   else:
-                      simplified_path.append(segment)
+                    simplified_path.append(segment)
                   prev = segment
                 elif isinstance(segment, inkex.paths.Move):
                   # Initial move. Add initial data
@@ -821,6 +926,76 @@ class BoxMaker(inkex.Effect):
               parent.remove(group)
 
 
-# Create effect instance and apply it.
-effect = BoxMaker()
-effect.run()
+# Main function for standalone execution
+def main():
+    """Run BoxMaker as a standalone script for testing or CLI use."""
+    # Create a BoxMaker instance
+    effect = BoxMaker()
+    
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description="CNC Tabbed Box Maker")
+    
+    # Add BoxMaker arguments
+    parser.add_argument('--unit', type=str, default='mm', help='Units (mm, cm, in)')
+    parser.add_argument('--inside', type=int, default=0, help='Inside/Outside dimensions (1=inside, 0=outside)')
+    parser.add_argument('--length', type=float, default=100, help='Length of box')
+    parser.add_argument('--width', type=float, default=100, help='Width of box')
+    parser.add_argument('--height', type=float, default=100, help='Height of box')
+    parser.add_argument('--tab', type=float, default=25, help='Nominal tab width')
+    parser.add_argument('--equal', type=int, default=0, help='Equal/Proportional tabs')
+    parser.add_argument('--tabsymmetry', type=int, default=0, help='Tab style')
+    parser.add_argument('--tabtype', type=int, default=0, help='Tab type')
+    parser.add_argument('--dimpleheight', type=float, default=0, help='Tab dimple height')
+    parser.add_argument('--dimplelength', type=float, default=0, help='Tab dimple length')
+    parser.add_argument('--hairline', type=int, default=0, help='Line thickness')
+    parser.add_argument('--thickness', type=float, default=10, help='Material thickness')
+    parser.add_argument('--kerf', type=float, default=0.5, help='Kerf (width of cut)')
+    parser.add_argument('--style', type=int, default=1, help='Layout style')
+    parser.add_argument('--spacing', type=float, default=1.0, help='Spacing between parts')
+    parser.add_argument('--boxtype', type=int, default=1, help='Box type')
+    parser.add_argument('--div_l', type=int, default=0, help='Dividers (Length axis)')
+    parser.add_argument('--div_l_custom', type=str, default='', help='Custom length divider widths')
+    parser.add_argument('--div_w', type=int, default=0, help='Dividers (Width axis)')
+    parser.add_argument('--div_w_custom', type=str, default='', help='Custom width divider widths')
+    parser.add_argument('--keydiv', type=int, default=3, help='Key dividers into walls/floor')
+    parser.add_argument('--optimize', type=bool, default=True, help='Optimize paths')
+    parser.add_argument('--output', type=str, help='Output SVG file')
+    
+    # Parse CLI arguments
+    args = parser.parse_args()
+    
+    # Transfer CLI arguments to BoxMaker options
+    effect.options = args
+    
+    # Add unittouu method to handle unit conversions when running standalone
+    if not hasattr(effect, 'unittouu'):
+        def unittouu(string):
+            unit = string[-2:]
+            value = float(string[:-2])
+            if unit == 'mm':
+                return value
+            elif unit == 'cm':
+                return value * 10
+            elif unit == 'in':
+                return value * 25.4
+            else:
+                return value
+        effect.svg = type('', (), {})()
+        effect.svg.unittouu = unittouu
+    
+    # Add dummy document attribute
+    effect.document = None
+    
+    # Run the effect
+    effect.effect()
+    
+    # If output file specified, save the SVG
+    if args.output:
+        # Implement SVG saving logic here
+        pass
+
+# Run main() if called as a script
+if __name__ == '__main__':
+    effect = BoxMaker()
+    effect.run()
