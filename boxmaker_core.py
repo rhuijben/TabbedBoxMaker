@@ -637,19 +637,26 @@ class BoxMakerCore:
             wall = 1 if piece[6] > 1 else 0
             floor = 1 if piece[6] == 1 else 0
 
+            # Apply kerf compensation to piece position and dimensions
+            # Each piece should be expanded outward by half-kerf on all external edges
+            kerf_compensated_x = x - self.halfkerf
+            kerf_compensated_y = y - self.halfkerf
+            kerf_compensated_dx = dx + self.kerf  # Add full kerf (half on each side)
+            kerf_compensated_dy = dy + self.kerf  # Add full kerf (half on each side)
+
             group_id = f"panel_{idx}"
 
-            # Generate and draw the sides of each piece
-            self.side(group_id, (x, y), (d, a), (-b, a), atabs * (-self.thickness if a else self.thickness), dtabs, dx, (1, 0), a, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * atabs, y_divider_positions)
-            self.side(group_id, (x + dx, y), (-b, a), (-b, -c), btabs * (self.thickness if b else -self.thickness), atabs, dy, (0, 1), b, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * btabs, x_divider_positions)
+            # Generate and draw the sides of each piece with kerf-compensated dimensions
+            self.side(group_id, (kerf_compensated_x, kerf_compensated_y), (d, a), (-b, a), atabs * (-self.thickness if a else self.thickness), dtabs, kerf_compensated_dx, (1, 0), a, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * atabs, y_divider_positions)
+            self.side(group_id, (kerf_compensated_x + kerf_compensated_dx, kerf_compensated_y), (-b, a), (-b, -c), btabs * (self.thickness if b else -self.thickness), atabs, kerf_compensated_dy, (0, 1), b, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * btabs, x_divider_positions)
             if atabs:
-                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, 0, [])
+                self.side(group_id, (kerf_compensated_x + kerf_compensated_dx, kerf_compensated_y + kerf_compensated_dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, kerf_compensated_dx, (-1, 0), c, 0, 0, [])
             else:
-                self.side(group_id, (x + dx, y + dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, dx, (-1, 0), c, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * ctabs, y_divider_positions)
+                self.side(group_id, (kerf_compensated_x + kerf_compensated_dx, kerf_compensated_y + kerf_compensated_dy), (-b, -c), (d, -c), ctabs * (self.thickness if c else -self.thickness), btabs, kerf_compensated_dx, (-1, 0), c, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divx * yholes * ctabs, y_divider_positions)
             if btabs:
-                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, 0, [])
+                self.side(group_id, (kerf_compensated_x, kerf_compensated_y + kerf_compensated_dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, kerf_compensated_dy, (0, -1), d, 0, 0, [])
             else:
-                self.side(group_id, (x, y + dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, dy, (0, -1), d, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * dtabs, x_divider_positions)
+                self.side(group_id, (kerf_compensated_x, kerf_compensated_y + kerf_compensated_dy), (d, -c), (d, a), dtabs * (-self.thickness if d else self.thickness), ctabs, kerf_compensated_dy, (0, -1), d, 0, (self.keydivfloor | wall) * (self.keydivwalls | floor) * self.divy * xholes * dtabs, x_divider_positions)
 
             # Handle dividers if this is the first piece (template)
             if idx == 0:
