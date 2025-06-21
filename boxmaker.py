@@ -1,6 +1,10 @@
 #! /usr/bin/env python -t
 '''
-Generates Inkscape SVG file containing box components needed to 
+Generates Inkscape SVG file containing box     parser.add_argument('--div-l', type=int, default=0, help='Dividers along length')
+    parser.add_argument('--div-w', type=int, default=0, help='Dividers along width')
+    parser.add_argument('--div-l-custom', type=str, default='', help='Custom compartment sizes along length (e.g. "63; 63.0; 50")')
+    parser.add_argument('--div-w-custom', type=str, default='', help='Custom compartment sizes along width (e.g. "63; 63.0; 50")')
+    parser.add_argument('--output', '-o', type=str, default='box.svg', help='Output SVG file')nents needed to 
 CNC (laser/mill) cut a box with tabbed joints taking kerf and clearance into account
 
 Refactored for testability while maintaining Inkscape compatibility
@@ -73,6 +77,8 @@ def create_cli_parser():
     parser.add_argument('--tabtype', type=int, choices=[0, 1], default=TabType.LASER, help='Tab type (0=laser, 1=mill)')
     parser.add_argument('--div-l', type=int, default=0, help='Dividers along length')
     parser.add_argument('--div-w', type=int, default=0, help='Dividers along width')
+    parser.add_argument('--div-l-custom', type=str, default='', help='Custom compartment sizes along length (e.g. "63,0; 63.0; 50")')
+    parser.add_argument('--div-w-custom', type=str, default='', help='Custom compartment sizes along width (e.g. "63,0; 63.0; 50")')
     parser.add_argument('--output', '-o', type=str, default='box.svg', help='Output SVG file')
     parser.add_argument('--inside', action='store_true', help='Dimensions are inside measurements')
     return parser
@@ -105,6 +111,8 @@ def main():
             tabtype=args.tabtype,
             div_l=args.div_l,
             div_w=args.div_w,
+            div_l_custom=args.div_l_custom,
+            div_w_custom=args.div_w_custom,
             inside=1 if args.inside else 0
         )
         
@@ -198,8 +206,12 @@ if INKSCAPE_AVAILABLE:
               dest='boxtype',default=25,help='Box type')
             self.arg_parser.add_argument('--div_l',action='store',type=int,
               dest='div_l',default=25,help='Dividers (Length axis)')
+            self.arg_parser.add_argument('--div_l_custom',action='store',type=str,
+              dest='div_l_custom',default='',help='Custom Length Compartment Widths')
             self.arg_parser.add_argument('--div_w',action='store',type=int,
               dest='div_w',default=25,help='Dividers (Width axis)')
+            self.arg_parser.add_argument('--div_w_custom',action='store',type=str,
+              dest='div_w_custom',default='',help='Custom Width Compartment Widths')
             self.arg_parser.add_argument('--keydiv',action='store',type=int,
               dest='keydiv',default=3,help='Key dividers into walls/floor')
             self.arg_parser.add_argument('--optimize',action='store',type=inkex.utils.Boolean,
@@ -233,6 +245,8 @@ if INKSCAPE_AVAILABLE:
             core.boxtype = self.options.boxtype
             core.div_l = self.options.div_l
             core.div_w = self.options.div_w
+            core.div_l_custom = self.options.div_l_custom
+            core.div_w_custom = self.options.div_w_custom
             core.keydiv = self.options.keydiv
             core.optimize = self.options.optimize
             

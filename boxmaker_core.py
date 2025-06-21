@@ -46,6 +46,8 @@ class BoxMakerCore:
         self.boxtype = BoxType.FULL_BOX
         self.div_l = 0
         self.div_w = 0
+        self.div_l_custom = ""  # Custom compartment sizes along length
+        self.div_w_custom = ""  # Custom compartment sizes along width
         self.keydiv = KeyDividerType.NONE
         self.optimize = True
           # Internal state
@@ -396,6 +398,11 @@ class BoxMakerCore:
         self.dogbone = 1 if self.tabtype == TabType.CNC else 0
         self.divx = self.div_l
         self.divy = self.div_w
+        
+        # Parse custom compartment sizes if provided
+        self.custom_l_sizes = self._parse_compartment_sizes(self.div_l_custom) if self.div_l_custom else []
+        self.custom_w_sizes = self._parse_compartment_sizes(self.div_w_custom) if self.div_w_custom else []
+        
         self.keydivwalls = 0 if self.keydiv == 3 or self.keydiv == 1 else 1
         self.keydivfloor = 0 if self.keydiv == 3 or self.keydiv == 2 else 1
 
@@ -610,8 +617,29 @@ class BoxMakerCore:
             btabs = tabbed >> 2 & 1
             ctabs = tabbed >> 1 & 1
             dtabs = tabbed & 1
-            xspacing = (X - self.thickness) / (self.divy + 1)
-            yspacing = (Y - self.thickness) / (self.divx + 1)
+            
+            # Calculate spacing based on custom sizes or even distribution
+            internal_x = X - self.thickness  # Internal width for dividers
+            internal_y = Y - self.thickness  # Internal length for dividers
+            
+            if self.custom_w_sizes and self.divy > 0:
+                # Custom spacing for width dividers
+                x_positions = self._calculate_divider_positions(internal_x, self.custom_w_sizes, self.divy)
+                x_spacings = self._get_custom_spacing(internal_x, x_positions)
+                xspacing = x_spacings[0] if x_spacings else internal_x / (self.divy + 1)
+            else:
+                # Even spacing for width dividers
+                xspacing = internal_x / (self.divy + 1)
+                
+            if self.custom_l_sizes and self.divx > 0:
+                # Custom spacing for length dividers  
+                y_positions = self._calculate_divider_positions(internal_y, self.custom_l_sizes, self.divx)
+                y_spacings = self._get_custom_spacing(internal_y, y_positions)
+                yspacing = y_spacings[0] if y_spacings else internal_y / (self.divx + 1)
+            else:
+                # Even spacing for length dividers
+                yspacing = internal_y / (self.divx + 1)
+                
             xholes = 1 if piece[6] < 3 else 0
             yholes = 1 if piece[6] != 2 else 0
             wall = 1 if piece[6] > 1 else 0
@@ -733,3 +761,105 @@ class BoxMakerCore:
 </svg>'''
         
         return svg_content
+
+    def _parse_compartment_sizes(self, size_string: str) -> List[float]:
+        """Parse compartment size string into list of floats
+        
+        Args:
+            size_string: String like "63,0; 63.0 ; 50" with sizes separated by semicolons
+            
+        Returns:
+            List of compartment sizes in mm
+            
+        Raises:
+            ValueError: If string format is invalid
+        """
+        if not size_string or not size_string.strip():
+            return []
+            
+        sizes = []
+        # Split by semicolon and process each size
+        for size_str in size_string.split(';'):
+            size_str = size_str.strip()
+            if not size_str:
+                continue
+                
+            # Replace comma with dot for European decimal separator
+            size_str = size_str.replace(',', '.')
+            
+            try:
+                size = float(size_str)
+                if size < 0:
+                    raise ValueError(f"Compartment size cannot be negative: {size}")
+                sizes.append(size)
+            except ValueError as e:
+                raise ValueError(f"Invalid compartment size '{size_str}': {e}")
+                
+        return sizes
+    
+    def _calculate_divider_positions(self, total_dimension: float, custom_sizes: List[float], 
+                                   num_dividers: int) -> List[float]:
+        """Calculate divider positions based on custom compartment sizes
+        
+        Args:
+            total_dimension: Total internal dimension (X or Y minus thickness)
+            custom_sizes: List of custom compartment sizes
+            num_dividers: Number of dividers
+            
+        Returns:
+            List of divider positions from start
+        """
+        if not custom_sizes:
+            # Fall back to even spacing
+            spacing = total_dimension / (num_dividers + 1)
+            return [spacing * (i + 1) for i in range(num_dividers)]
+        
+        # Calculate positions based on custom sizes
+        positions = []
+        current_pos = 0
+        
+        for i in range(num_dividers):
+            if i < len(custom_sizes):
+                # Use custom size
+                compartment_size = custom_sizes[i]
+            else:
+                # Calculate remaining space divided by remaining compartments
+                remaining_dividers = num_dividers - i
+                remaining_compartments = remaining_dividers + 1
+                remaining_space = total_dimension - current_pos
+                compartment_size = remaining_space / remaining_compartments
+                
+            current_pos += compartment_size
+            
+            # Ensure we don't go beyond the total dimension
+            if current_pos >= total_dimension:
+                current_pos = total_dimension * (i + 1) / (num_dividers + 1)
+                
+            positions.append(current_pos)
+            
+        return positions
+
+    def _get_custom_spacing(self, total_dimension: float, positions: List[float]) -> List[float]:
+        """Calculate spacing between dividers for custom positions
+        
+        Args:
+            total_dimension: Total internal dimension  
+            positions: List of divider positions
+            
+        Returns:
+            List of spacing values between dividers
+        """
+        if not positions:
+            return []
+            
+        spacings = []
+        prev_pos = 0
+        
+        for pos in positions:
+            spacings.append(pos - prev_pos)
+            prev_pos = pos
+            
+        # Add final spacing to end
+        spacings.append(total_dimension - prev_pos)
+        
+        return spacings

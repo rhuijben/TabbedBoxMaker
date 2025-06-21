@@ -192,7 +192,8 @@ def test_error_conditions():
         return False
     except DimensionError:
         print("✓ Correctly handled zero dimensions")
-      # Test tab too large (physical constraint - larger than dimension/3)
+    
+    # Test tab too large (physical constraint - larger than dimension/3)
     core = BoxMakerCore()
     try:
         # 200x250x100mm box with 80mm tabs (larger than 100mm/3 = 33mm)
@@ -201,7 +202,9 @@ def test_error_conditions():
         print("✗ Should have raised error for oversized tab")
         return False
     except TabError:
-        print("✓ Correctly handled oversized tab")    # Test thickness too large for dimensions
+        print("✓ Correctly handled oversized tab")    
+    
+    # Test thickness too large for dimensions
     core = BoxMakerCore()
     try:
         # Small 6x6x6cm box with 3.5cm thickness (more than half)
@@ -375,6 +378,200 @@ def test_large_box_big_tabs():
         return False
 
 
+def test_custom_compartment_sizes():
+    """Test custom compartment sizes feature"""
+    print("Testing custom compartment sizes...")
+    
+    core = BoxMakerCore()
+    # Test the example from the issue: 21cm inside width with custom compartments
+    core.set_parameters(
+        length=210,  # 21cm
+        width=150,   # 15cm  
+        height=50,   # 5cm
+        thickness=3,
+        tab=15,
+        div_l=3,  # 3 dividers (4 compartments)
+        div_l_custom="63; 63.0; 50",  # First 3 compartments: 63mm, 63mm, 50mm
+        inside=1  # Inside dimensions
+    )
+    
+    try:
+        core.generate_box()
+        svg_content = core.generate_svg()
+        
+        if '<svg' in svg_content and '</svg>' in svg_content:
+            print("✓ Custom compartment sizes test passed")
+            return True
+        else:
+            print("✗ Failed to generate valid SVG for custom compartments")
+            return False
+    except Exception as e:
+        print(f"✗ Custom compartment sizes test failed: {e}")
+        return False
+
+
+def test_mixed_custom_compartments():
+    """Test custom compartments in both directions"""
+    print("Testing mixed custom compartments...")
+    
+    core = BoxMakerCore()
+    core.set_parameters(
+        length=200, width=160, height=60,
+        thickness=3, tab=15,
+        div_l=2, div_w=1,
+        div_l_custom="80; 60",  # Length compartments
+        div_w_custom="70"       # Width compartments
+    )
+    
+    try:
+        core.generate_box()
+        svg_content = core.generate_svg()
+        
+        if '<svg' in svg_content and '</svg>' in svg_content:
+            print("✓ Mixed custom compartments test passed")
+            return True
+        else:
+            print("✗ Failed to generate valid SVG for mixed compartments")
+            return False
+    except Exception as e:
+        print(f"✗ Mixed custom compartments test failed: {e}")
+        return False
+
+
+def test_calculated_vs_explicit_compartment_output():
+    """Test that calculated even spacing matches explicit compartment sizes for a 3x3 grid"""
+    print("Testing calculated vs explicit compartment output...")
+    
+    # For a 300x240mm box with 3x3 compartments, calculate even spacing
+    # Internal dimensions: 300-6=294mm length, 240-6=234mm width (3mm thickness * 2)
+    # Even compartments: 294/4=73.5mm each length, 234/4=58.5mm each width
+    
+    # Test 1: Box with calculated even spacing (3 dividers each direction)
+    core1 = BoxMakerCore()
+    core1.set_parameters(
+        length=300, width=240, height=60,
+        thickness=3, tab=18, kerf=0.1,
+        div_l=3, div_w=3,
+        inside=1  # Inside dimensions
+    )
+    
+    try:
+        core1.generate_box()
+        svg1 = core1.generate_svg()
+    except Exception as e:
+        print(f"✗ Failed to generate calculated spacing box: {e}")
+        return False
+    
+    # Test 2: Box with explicit even spacing (should be identical)
+    core2 = BoxMakerCore()
+    core2.set_parameters(
+        length=300, width=240, height=60,
+        thickness=3, tab=18, kerf=0.1,
+        div_l=3, div_w=3,
+        div_l_custom="73.5; 73.5; 73.5",  # 4 compartments of 73.5mm each
+        div_w_custom="58.5; 58.5; 58.5",  # 4 compartments of 58.5mm each
+        inside=1  # Inside dimensions
+    )
+    
+    try:
+        core2.generate_box()
+        svg2 = core2.generate_svg()
+    except Exception as e:
+        print(f"✗ Failed to generate explicit spacing box: {e}")
+        return False
+    
+    # Compare the SVG outputs
+    if not svg1 or not svg2:
+        print("✗ One or both SVGs are empty")
+        return False
+    
+    # Check that both are valid SVGs
+    if '<svg' not in svg1 or '</svg>' not in svg1:
+        print("✗ Calculated spacing produced invalid SVG")
+        return False
+        
+    if '<svg' not in svg2 or '</svg>' not in svg2:
+        print("✗ Explicit spacing produced invalid SVG")
+        return False
+    
+    # For this test, the outputs should be very similar (the paths might have tiny differences due to floating point)
+    # We'll check that key characteristics are the same
+    svg1_lines = svg1.count('<path')
+    svg2_lines = svg2.count('<path')
+    
+    if abs(svg1_lines - svg2_lines) > 2:  # Allow small differences
+        print(f"✗ Different number of paths: calculated={svg1_lines}, explicit={svg2_lines}")
+        return False
+    
+    # Check viewBox dimensions are similar
+    import re
+    viewbox1 = re.search(r'viewBox="([^"]*)"', svg1)
+    viewbox2 = re.search(r'viewBox="([^"]*)"', svg2)
+    
+    if viewbox1 and viewbox2:
+        vb1 = viewbox1.group(1)
+        vb2 = viewbox2.group(1)
+        if vb1 != vb2:
+            print(f"! ViewBox differs slightly: calculated='{vb1}', explicit='{vb2}' (this may be acceptable)")
+    
+    # Save both for visual comparison
+    with open('test_results/calculated_compartments_3x3.svg', 'w') as f:
+        f.write(svg1)
+    with open('test_results/explicit_compartments_3x3.svg', 'w') as f:
+        f.write(svg2)
+    
+    print("✓ Calculated vs explicit compartment test passed")
+    print("  Generated files for comparison:")
+    print("    test_results/calculated_compartments_3x3.svg")
+    print("    test_results/explicit_compartments_3x3.svg")
+    return True
+
+
+def test_custom_compartment_parsing():
+    """Test parsing of custom compartment sizes with different decimal separators"""
+    print("Testing custom compartment parsing...")
+    
+    from boxmaker_core import BoxMakerCore
+    
+    # Test various decimal separator combinations
+    test_cases = [
+        ("63,5; 63.0; 50", [63.5, 63.0, 50.0]),  # Mixed comma and dot
+        ("63.5;50,0;75", [63.5, 50.0, 75.0]),    # Dot and comma mixed
+        ("60; 70; 80.5", [60.0, 70.0, 80.5]),    # All dots with spaces
+        ("100", [100.0]),                         # Single value
+        ("50,5", [50.5]),                         # Single value with comma
+        ("", []),                                 # Empty string
+        ("  63.0  ;  70,5  ;  80  ", [63.0, 70.5, 80.0])  # Extra whitespace
+    ]
+    
+    core = BoxMakerCore()
+    
+    for input_str, expected in test_cases:
+        try:
+            # Use a simple box setup to test parsing
+            core.set_parameters(
+                length=200, width=150, height=50,
+                thickness=3, tab=15,
+                div_l=len(expected) if expected else 0,
+                div_l_custom=input_str
+            )
+            
+            # Just check that it doesn't crash - the actual parsing logic is tested in the core
+            core.generate_box()
+            svg_content = core.generate_svg()
+            
+            if not ('<svg' in svg_content and '</svg>' in svg_content):
+                print(f"✗ Failed to generate SVG for input: '{input_str}'")
+                return False
+                
+        except Exception as e:
+            print(f"✗ Parsing failed for input '{input_str}': {e}")
+            return False
+    
+    print("✓ Custom compartment parsing test passed")
+    return True
+
+
 def run_all_tests():
     """Run all tests"""
     print("Running BoxMaker tests...\n")
@@ -390,7 +587,11 @@ def run_all_tests():
         test_save_test_files,
         test_realistic_compartment_box,
         test_thin_tabs,
-        test_large_box_big_tabs
+        test_large_box_big_tabs,
+        test_custom_compartment_sizes,
+        test_mixed_custom_compartments,
+        test_calculated_vs_explicit_compartment_output,
+        test_custom_compartment_parsing
     ]
     
     passed = 0

@@ -75,6 +75,19 @@ def main():
             'args': ['--length', '100', '--width', '80', '--height', '50', 
                     '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--style', '3',
                     '--output', 'test_assets/compact_layout_box.svg']
+        },
+        {
+            'description': "7. Box with custom compartment sizes (210x150x50mm, 4 compartments: 63mm, 63mm, 50mm, remainder)",
+            'args': ['--length', '210', '--width', '150', '--height', '50', 
+                    '--thickness', '3', '--tab', '15', '--div-l', '3', '--div-l-custom', '63; 63.0; 50',
+                    '--inside', '--output', 'test_assets/custom_compartments_box.svg']
+        },
+        {
+            'description': "8. Box with custom compartments in both length and width directions",
+            'args': ['--length', '200', '--width', '160', '--height', '60', 
+                    '--thickness', '3', '--tab', '15', '--div-l', '2', '--div-w', '1', 
+                    '--div-l-custom', '80; 60', '--div-w-custom', '70',
+                    '--output', 'test_assets/mixed_custom_compartments.svg']
         }    ]
     
     success_count = 0

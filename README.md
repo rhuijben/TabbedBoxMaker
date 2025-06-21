@@ -14,11 +14,12 @@ Refactored for testability and CLI support by [Bert Huijben](https://github.com/
 
 ### ✨ New Features
 - **🚀 CLI Support**: Generate box SVGs from command line without Inkscape
-- **🧪 Comprehensive Testing**: Automated test suite with 11 test scenarios
+- **🎯 Custom Compartment Sizes**: Configure exact compartment dimensions instead of even spacing
+- **🧪 Comprehensive Testing**: Automated test suite with 13 test scenarios
 - **🔧 Same Inkscape Experience**: Identical behavior when used as extension
 - **⚡ Continuous Integration**: Automated testing on every commit and PR
 - **📊 Cross-Platform**: Tested on Ubuntu, Windows, and macOS
-- **🎯 Robust Validation**: Input validation with helpful error messages
+- **🛡️ Robust Validation**: Input validation with helpful error messages
 
 ### 🔧 Technical Improvements
 - **Modular Architecture**: Core logic separated for testability
@@ -49,6 +50,9 @@ python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --tabtype 1
 # Box with dividers (2 length, 1 width)
 python boxmaker.py --length 120 --width 100 --height 60 --div-l 2 --div-w 1 --output box_with_dividers.svg
 
+# Custom compartment sizes (210mm wide with 63mm, 63mm, 50mm compartments + remainder)
+python boxmaker.py --length 210 --width 150 --height 50 --div-l 3 --div-l-sizes "63; 63.0; 50" --inside --output custom_compartments.svg
+
 # Thick material (6mm plywood)
 python boxmaker.py --length 150 --width 100 --height 75 --thickness 6 --kerf 0.2 --tab 25 --output thick_box.svg
 
@@ -69,6 +73,8 @@ python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --inside --
 --tabtype {0,1}     Tab type (0=laser, 1=cnc/dogbone)
 --div-l INT         Dividers along length
 --div-w INT         Dividers along width
+--div-l-sizes STR   Custom compartment sizes along length (e.g. "63; 63.0; 50")
+--div-w-sizes STR   Custom compartment sizes along width (e.g. "70,5; 80")
 --inside            Dimensions are inside measurements
 --output FILE       Output SVG file
 ```
@@ -138,6 +144,10 @@ Parameters in order of appearance:
 * **Dividers (Length axis)** - use this to create additional LxH panels that mount inside the box along the length axis and have finger joints into the side panels and slots for Width dividers to slot into
 				
 * **Dividers (Width axis)** - use this to create additional WxH panels that mount inside the box along the width axis and have finger joints into the side panels and slots for Length dividers to slot into
+
+* **Length Compartment Sizes** - 🆕 **NEW!** Custom sizes for compartments along the length axis. Enter sizes separated by semicolons (e.g. "63,0; 63.0; 50"). Both comma and dot decimal separators are supported. Remaining space is divided evenly if fewer sizes than dividers are specified.
+
+* **Width Compartment Sizes** - 🆕 **NEW!** Custom sizes for compartments along the width axis. Same format as Length Compartment Sizes.
 						 
 * **Key the dividers into** - this allows you to choose if/how the dividers are keyed into the sides of the box. Options are:
 	* None - no keying, dividers will be free to slide in and out

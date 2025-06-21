@@ -82,7 +82,9 @@
 			</param>
 
 			<param name="div_l" type="int" min="0" max="20" _gui-text="    Dividers (Length axis)">2</param>
+			<param name="div_l_custom" type="string" _gui-text="    Custom Length Compartment Widths (semicolon-separated, optional)"></param>
 			<param name="div_w" type="int" min="0" max="20" _gui-text="    Dividers (Width axis)">3</param>
+			<param name="div_w_custom" type="string" _gui-text="    Custom Width Compartment Widths (semicolon-separated, optional)"></param>
 			<param name="keydiv" _gui-text="    Key the dividers into" type="optiongroup" appearance="combo">
 				<option value="3">None</option>
 				<option value="2">Walls</option>
