@@ -50,7 +50,10 @@ v1.2 - 2023-12-04 contributed by [@mausmaux](https://github.com/mausmaux) - See 
  - Fixed bug with dimple unit conversion.
  - Fixed boxes which have omitted sides are incorrectly drawn when using the rotationally symmetric mode.
 
- This program is free software: you can redistribute it and/or modify
+v1.3 - 2025-xx-yy
+ - Added optional path optimizations (PR #66, bert@vmoo.com)
+
+This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
