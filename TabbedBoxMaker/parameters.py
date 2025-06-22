@@ -155,34 +155,33 @@ PARAMETER_DEFINITIONS = [
         max_val=1000.0,
         precision=2
     ),
-    
-    ParameterDefinition(
+      ParameterDefinition(
         name="equal",
-        param_type=int,
-        default=TabWidth.FIXED,
+        param_type=str,
+        default="fixed",
         description="Tab width calculation method",
         enum_type=TabWidth,
-        choices=[TabWidth.FIXED, TabWidth.PROPORTIONAL],
+        choices=["fixed", "proportional"],
         inkscape_gui_text="Width"
     ),
     
     ParameterDefinition(
         name="tabtype",
-        param_type=int,
-        default=TabType.LASER,
+        param_type=str,
+        default="laser",
         description="Tab cutting type",
         enum_type=TabType,
-        choices=[TabType.LASER, TabType.CNC],
+        choices=["laser", "cnc"],
         inkscape_gui_text="Type"
     ),
     
     ParameterDefinition(
         name="tabsymmetry",
-        param_type=int,
-        default=TabSymmetry.XY_SYMMETRIC,
+        param_type=str,
+        default="xy",
         description="Tab symmetry style",
         enum_type=TabSymmetry,
-        choices=[TabSymmetry.XY_SYMMETRIC, TabSymmetry.ROTATE_SYMMETRIC],
+        choices=["xy", "rotational"],
         inkscape_gui_text="Symmetry"
     ),
     
@@ -210,36 +209,32 @@ PARAMETER_DEFINITIONS = [
         precision=2,
         advanced=True
     ),
-    
-    # Box Configuration
+      # Box Configuration
     ParameterDefinition(
         name="boxtype",
-        param_type=int,
-        default=BoxType.FULL_BOX,
+        param_type=str,
+        default="full",
         description="Box type (which sides to include)",
         enum_type=BoxType,
-        choices=list(BoxType),
+        choices=["full", "open-top", "open-top-bottom", "open-three", "open-ends", "two-panels"],
         inkscape_gui_text="Box Type"
     ),
     
     ParameterDefinition(
         name="inside",
-        param_type=int,
-        default=InsideOutside.OUTSIDE,
-        description="Dimension interpretation",
-        enum_type=InsideOutside,
-        choices=[InsideOutside.OUTSIDE, InsideOutside.INSIDE],
-        inkscape_gui_text="Box Dimensions"
+        param_type=bool,
+        default=False,
+        description="Use inside dimensions instead of outside",
+        inkscape_gui_text="Inside Dimensions"
     ),
-    
-    # Layout and Style
+      # Layout and Style
     ParameterDefinition(
         name="style",
-        param_type=int,
-        default=LayoutStyle.SEPARATED,
+        param_type=str,
+        default="separated",
         description="Layout style for arranging pieces",
         enum_type=LayoutStyle,
-        choices=list(LayoutStyle),
+        choices=["separated", "three-piece", "compact"],
         inkscape_gui_text="Layout"
     ),
     
@@ -253,16 +248,13 @@ PARAMETER_DEFINITIONS = [
         max_val=1000.0,
         precision=2
     ),
-    
-    # Line Rendering
+      # Line Rendering
     ParameterDefinition(
         name="hairline",
-        param_type=int,
-        default=LineThickness.DEFAULT,
-        description="Line thickness style",
-        enum_type=LineThickness,
-        choices=[LineThickness.DEFAULT, LineThickness.HAIRLINE],
-        inkscape_gui_text="Line Thickness"
+        param_type=bool,
+        default=False,
+        description="Use hairline thickness (0.002\" for Epilog)",
+        inkscape_gui_text="Hairline Thickness"
     ),
       # Units
     ParameterDefinition(
@@ -314,14 +306,13 @@ PARAMETER_DEFINITIONS = [
         cli_name="--div-w-custom", 
         inkscape_gui_text="Custom Width Compartment Widths (semicolon-separated, optional)"
     ),
-    
-    ParameterDefinition(
+      ParameterDefinition(
         name="keydiv",
-        param_type=int,
-        default=KeyDividerType.NONE,
+        param_type=str,
+        default="none",
         description="Key dividers into walls/floor",
         enum_type=KeyDividerType,
-        choices=list(KeyDividerType),
+        choices=["all", "walls", "floor", "none"],
         inkscape_gui_text="Key the dividers into"
     ),
     
@@ -496,7 +487,65 @@ def validate_parameter_value(param: ParameterDefinition, value: Any) -> Any:
     if param.choices is not None and converted_value not in param.choices:
         raise ValueError(f"Parameter '{param.name}' must be one of: {param.choices}")
     
+    # Convert string to enum if needed
+    if param.enum_type and isinstance(converted_value, str):
+        converted_value = convert_string_to_enum(converted_value, param.enum_type)
+    
     return converted_value
+
+
+def convert_string_to_enum(string_value: str, enum_type) -> Any:
+    """Convert string value to corresponding enum value"""
+    if enum_type == BoxType:
+        string_to_enum = {
+            "full": BoxType.FULL_BOX,
+            "open-top": BoxType.NO_TOP,
+            "open-top-bottom": BoxType.NO_BOTTOM,
+            "open-three": BoxType.NO_SIDES,
+            "open-ends": BoxType.NO_FRONT_BACK,
+            "two-panels": BoxType.NO_LEFT_RIGHT
+        }
+        return string_to_enum.get(string_value, BoxType.FULL_BOX)
+    
+    elif enum_type == TabType:
+        string_to_enum = {
+            "laser": TabType.LASER,
+            "cnc": TabType.CNC
+        }
+        return string_to_enum.get(string_value, TabType.LASER)
+    
+    elif enum_type == LayoutStyle:
+        string_to_enum = {
+            "separated": LayoutStyle.SEPARATED,
+            "three-piece": LayoutStyle.NESTED,
+            "compact": LayoutStyle.COMPACT
+        }
+        return string_to_enum.get(string_value, LayoutStyle.SEPARATED)
+    
+    elif enum_type == KeyDividerType:
+        string_to_enum = {
+            "all": KeyDividerType.WALLS_AND_FLOOR,
+            "walls": KeyDividerType.WALLS_ONLY,
+            "floor": KeyDividerType.FLOOR_ONLY,
+            "none": KeyDividerType.NONE
+        }
+        return string_to_enum.get(string_value, KeyDividerType.NONE)
+    
+    elif enum_type == TabWidth:
+        string_to_enum = {
+            "fixed": TabWidth.FIXED,
+            "proportional": TabWidth.PROPORTIONAL
+        }
+        return string_to_enum.get(string_value, TabWidth.FIXED)
+    
+    elif enum_type == TabSymmetry:
+        string_to_enum = {
+            "xy": TabSymmetry.XY_SYMMETRIC,
+            "rotational": TabSymmetry.ROTATE_SYMMETRIC
+        }
+        return string_to_enum.get(string_value, TabSymmetry.XY_SYMMETRIC)
+    
+    return string_value
 
 
 def get_enum_display_name(enum_value, enum_type) -> str:

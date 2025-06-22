@@ -66,23 +66,19 @@ def add_cli_argument(parser: argparse.ArgumentParser, param: ParameterDefinition
         'help': param.description,
         'default': param.default
     }
-    
-    # Handle type and choices
+      # Handle type and choices
     if param.enum_type:
-        # For enums, use the integer values but show meaningful choices in help
-        kwargs['type'] = int
-        kwargs['choices'] = [int(choice) for choice in param.choices] if param.choices else None
+        # For enums with string choices, use the string values directly
+        kwargs['type'] = str
+        kwargs['choices'] = param.choices if param.choices else None
         
-        # Enhance help text with enum meanings
+        # Enhance help text with choice meanings
         if param.choices:
-            choice_help = []
-            for choice in param.choices:
-                display_name = get_enum_display_name(choice, param.enum_type)
-                choice_help.append(f"{int(choice)}={display_name}")
-            kwargs['help'] += f" ({', '.join(choice_help)})"
+            kwargs['help'] += f" (choices: {', '.join(param.choices)})"
             
     elif param.param_type == bool:
         kwargs['action'] = 'store_true'
+        kwargs.pop('default', None)  # Remove default for boolean flags
         kwargs.pop('type', None)  # Remove type for boolean flags
         if param.default:
             # If default is True, make it store_false
@@ -205,13 +201,12 @@ def generate_inkscape_xml() -> str:
     effects_menu = SubElement(effect, 'effects-menu')
     submenu = SubElement(effects_menu, 'submenu')
     submenu.set('_name', 'CNC Tools')
-    
-    # Script configuration
+      # Script configuration
     script = SubElement(root, 'script')
     command = SubElement(script, 'command')
     command.set('location', 'inx')
     command.set('interpreter', 'python')
-    command.text = 'boxmaker.py'
+    command.text = 'boxmaker_inkscape.py'
     
     # Format and return XML
     rough_string = tostring(root, 'unicode')
@@ -245,8 +240,7 @@ def add_xml_parameter(parent_element, param: ParameterDefinition):
     param_elem = SubElement(parent_element, 'param')
     param_elem.set('name', param.inkscape_name or param.name)
     param_elem.set('_gui-text', param.inkscape_gui_text or param.description)
-    
-    # Handle different parameter types
+      # Handle different parameter types
     if param.enum_type:
         param_elem.set('type', 'optiongroup')
         param_elem.set('appearance', 'combo')
@@ -254,9 +248,11 @@ def add_xml_parameter(parent_element, param: ParameterDefinition):
         # Add options
         if param.choices:
             for choice in param.choices:
-                option = SubElement(param_elem, '_option')
-                option.set('value', str(int(choice)))
-                option.text = get_enum_display_name(choice, param.enum_type)
+                option = SubElement(param_elem, 'option')
+                option.set('value', str(choice))
+                # Get display name if available, otherwise use the choice itself
+                display_name = get_enum_display_name_for_string(choice, param.enum_type)
+                option.text = display_name
                 
     elif param.param_type == bool:
         param_elem.set('type', 'boolean')
@@ -337,3 +333,57 @@ def validate_all_parameters(param_dict: Dict[str, Any]) -> Dict[str, Any]:
             validated[name] = value
             
     return validated
+
+
+def get_enum_display_name_for_string(choice: str, enum_type=None) -> str:
+    """
+    Convert string enum values to user-friendly display names for the INX file
+    
+    Args:
+        choice: The string value from the enum choices
+        enum_type: The enum type (not used yet, but available for future enhancements)
+        
+    Returns:
+        User-friendly display name for the choice
+    """
+    # Mapping of string values to display names
+    display_mapping = {
+        # Tab width types
+        "fixed": "Fixed Width",
+        "proportional": "Proportional", 
+        
+        # Tab types
+        "laser": "Laser Cut",
+        "cnc": "CNC/Router",
+        
+        # Tab symmetry
+        "xy": "X-Y Symmetric",
+        "rotational": "Rotational",
+        
+        # Box types
+        "full": "Full Box",
+        "open-top": "Open Top",
+        "open-top-bottom": "Open Top & Bottom", 
+        "open-three": "Three Sides Only",
+        "open-ends": "Open Front & Back",
+        "two-panels": "Two Panels Only",
+        
+        # Layout styles
+        "separated": "Separated Layout",
+        "three-piece": "3-Piece Layout", 
+        "compact": "Compact Layout",
+        
+        # Units
+        "mm": "Millimeters",
+        "cm": "Centimeters", 
+        "in": "Inches",
+        
+        # Key divider types
+        "all": "Walls and Floor",
+        "walls": "Walls Only",
+        "floor": "Floor Only", 
+        "none": "No Dividers"
+    }
+    
+    # Return mapped display name or capitalize the choice as fallback
+    return display_mapping.get(choice, choice.replace("_", " ").replace("-", " ").title())

@@ -65,13 +65,13 @@ def main():
         {
             'description': "1. Basic 100x80x50mm box for laser cutting",
             'args': ['--length', '100', '--width', '80', '--height', '50', 
-                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--tabtype', '0',
+                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--tabtype', 'laser',
                     '--output', 'test_assets/basic_laser_box.svg']
         },
         {
             'description': "2. Same box but for CNC milling (with dogbone cuts)",
             'args': ['--length', '100', '--width', '80', '--height', '50', 
-                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--tabtype', '1',
+                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--tabtype', 'cnc',
                     '--output', 'test_assets/basic_cnc_box.svg']
         },
         {
@@ -95,7 +95,7 @@ def main():
         {
             'description': "6. Compact layout style",
             'args': ['--length', '100', '--width', '80', '--height', '50', 
-                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--style', '3',
+                    '--thickness', '3', '--kerf', '0.1', '--tab', '15', '--style', 'compact',
                     '--output', 'test_assets/compact_layout_box.svg']
         },
         {
