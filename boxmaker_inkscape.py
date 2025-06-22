@@ -38,11 +38,8 @@ except ImportError:
     print("Use boxmaker.py for command-line usage")
     sys.exit(1)
 
-from boxmaker_core import BoxMakerCore
-from boxmaker_exceptions import DimensionError, TabError, MaterialError
-from boxmaker_config import (
-    create_inkscape_extension_args, extract_parameters_from_namespace, validate_all_parameters
-)
+from TabbedBoxMaker import BoxMakerCore, DimensionError, TabError, MaterialError
+from TabbedBoxMaker import create_inkscape_extension_args, extract_parameters_from_namespace, validate_all_parameters
 
 __version__ = "1.3"
 

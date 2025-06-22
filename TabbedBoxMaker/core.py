@@ -46,7 +46,7 @@ import sys
 from copy import deepcopy
 from typing import List, Tuple, Optional, Dict, Any
 
-from boxmaker_constants import (
+from .constants import (
     BoxType, TabType, LayoutStyle, KeyDividerType, JoinType,
     DEFAULT_LENGTH, DEFAULT_WIDTH, DEFAULT_HEIGHT, DEFAULT_TAB_WIDTH,
     DEFAULT_THICKNESS, DEFAULT_KERF, DEFAULT_SPACING,
@@ -58,8 +58,8 @@ from boxmaker_constants import (
     DEFAULT_OVERLAP_MULTIPLIER, DEFAULT_JOIN_TYPE,
     INCHES_TO_MM, HAIRLINE_THICKNESS_INCHES
 )
-from boxmaker_exceptions import DimensionError, TabError, MaterialError
-from box_design import BoxDesign, create_box_design, get_wall_configuration, SplitInfo, SplitPiece
+from .exceptions import DimensionError, TabError, MaterialError
+from .design import BoxDesign, create_box_design, get_wall_configuration, SplitInfo, SplitPiece
 
 
 class BoxMakerCore:
@@ -197,7 +197,7 @@ class BoxMakerCore:
     def _validate_dimensions(self) -> None:
         """Validate box dimensions are within acceptable ranges"""
         # Get wall configuration to determine which dimensions are critical
-        from box_design import get_wall_configuration
+        from .design import get_wall_configuration
         wall_config = get_wall_configuration(self.boxtype)
         
         dimensions = [
@@ -243,7 +243,7 @@ class BoxMakerCore:
         
         # Physical constraint: tabs can't be larger than smallest relevant dimension / 3
         # For box types without top/bottom, height doesn't constrain tab size
-        from box_design import get_wall_configuration
+        from .design import get_wall_configuration
         wall_config = get_wall_configuration(self.boxtype)
         
         # Determine which dimensions are relevant for tab constraints

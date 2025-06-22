@@ -12,7 +12,7 @@ from typing import Dict, Any
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 
-from boxmaker_parameters import (
+from .parameters import (
     PARAMETER_DEFINITIONS, get_parameters_for_cli, get_parameters_for_inkscape,
     get_enum_display_name, ParameterDefinition
 )
@@ -152,7 +152,7 @@ def generate_inkscape_xml() -> str:
     name_elem.text = 'CNC Tabbed Box Maker'
     
     id_elem = SubElement(root, 'id') 
-    id_elem.text = 'nz.paulh-rnd.tabbedboxmaker'
+    id_elem.text = 'net.ampscm.tabbedboxmaker'
     
     # Create main layout container
     hbox = SubElement(root, 'hbox')
@@ -324,7 +324,7 @@ def validate_all_parameters(param_dict: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         ValueError: If any parameter is invalid
     """
-    from boxmaker_parameters import validate_parameter_value, get_parameter_by_name
+    from .parameters import validate_parameter_value, get_parameter_by_name
     
     validated = {}
     

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Union, Any, Dict
 from enum import IntEnum
 
-from boxmaker_constants import (
+from .constants import (
     BoxType, TabType, LayoutStyle, KeyDividerType, JoinType,
     DEFAULT_OVERLAP_MULTIPLIER, MIN_OVERLAP_MULTIPLIER, MAX_OVERLAP_MULTIPLIER
 )

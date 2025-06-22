@@ -49,8 +49,8 @@ Functions:
 from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
 import math
-from boxmaker_exceptions import DimensionError, ValidationError
-from boxmaker_constants import (
+from .exceptions import DimensionError, ValidationError
+from .constants import (
     BoxType, LayoutStyle, JoinType, MIN_SPLIT_PIECE_RATIO,
     DEFAULT_OVERLAP_MULTIPLIER, MIN_OVERLAP_MULTIPLIER, MAX_OVERLAP_MULTIPLIER
 )

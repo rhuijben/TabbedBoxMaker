@@ -1,6 +1,35 @@
 # TabbedBoxMaker: A free Inkscape extension for generating tab-jointed box patterns
 
-[![CI - Test and Validate BoxMaker](https://github.com/rhuijben/TabbedBoxMaker/actions/workflows/ci.yml/badge.svg)](https://github.com/rhuijben/TabbedBoxMaker/actions/workflows/ci.yml)
+[![CI - Test and Validate BoxMaker](https://github.com/rhuijben/TabbedBoxMaker/actions/workfl## Project Structure
+
+```
+TabbedBox2/
+├── boxmaker.py              # CLI entry point
+├── boxmaker_inkscape.py     # Inkscape extension entry point  
+├── boxmaker.inx             # Inkscape interface definition
+├── schroffmaker.inx         # Schroff rack box interface
+├── src/boxmaker/            # Core library
+│   ├── __init__.py          # Package initialization
+│   ├── boxmaker_core.py     # Core box generation logic
+│   ├── boxmaker_constants.py # Enums and constants
+│   ├── boxmaker_exceptions.py # Custom exceptions
+│   ├── boxmaker_parameters.py # Parameter definitions
+│   └── boxmaker_config.py   # Configuration utilities
+├── tests/                   # Test suite
+├── scripts/                 # Demo and analysis scripts
+├── docs/                    # Documentation
+├── test_assets/            # Reference examples (tracked in git)
+├── test_results/           # Test outputs (gitignored)
+└── README.md
+```
+
+### Key Files
+
+- **`boxmaker.py`** - Clean CLI interface with comprehensive help and examples
+- **`boxmaker_inkscape.py`** - Dedicated Inkscape extension (no dual-mode complexity)
+- **`src/boxmaker/`** - Core library package with proper imports
+- **`tests/`** - Comprehensive test suite for CI/CD
+- **`boxmaker.inx`** - Inkscape interface definition (references boxmaker_inkscape.py)l/badge.svg)](https://github.com/rhuijben/TabbedBoxMaker/actions/workflows/ci.yml)
 
 _version 2.0 - 21 Jun 2025_
 
