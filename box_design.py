@@ -46,10 +46,11 @@ Functions:
   parse_compartment_sizes: Parse custom compartment size strings
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
+import math
 from boxmaker_exceptions import DimensionError, ValidationError
-from boxmaker_constants import BoxType, LayoutStyle
+from boxmaker_constants import BoxType, LayoutStyle, JoinType
 
 
 @dataclass
@@ -83,10 +84,18 @@ class BoxDesign:
     
     # Divider information
     length_dividers: DividerInfo  # Dividers running parallel to width (in length direction)
-    width_dividers: DividerInfo   # Dividers running parallel to length (in width direction)
-      # Box configuration
+    width_dividers: DividerInfo   # Dividers running parallel to length (in width direction)    # Box configuration
     box_type: BoxType
     style: LayoutStyle
+    
+    # Material size limits and piece splitting (TODO: implement full splitting logic)
+    max_material_width: float = 0.0   # 0 = unlimited
+    max_material_height: float = 0.0  # 0 = unlimited
+    overlap_multiplier: float = 3.0   # Overlap = thickness * multiplier  
+    join_type: JoinType = JoinType.SIMPLE_OVERLAP
+      # Split information (calculated during design)
+    split_info: Optional[Dict[str, 'SplitInfo']] = None  # piece_name -> SplitInfo
+    split_pieces: Optional[List['SplitPiece']] = None    # All split pieces
     
     def __post_init__(self):
         """Validate the design after creation"""
@@ -322,7 +331,11 @@ def create_box_design(length: float, width: float, height: float, thickness: flo
                      div_l: int = 0, div_w: int = 0,
                      div_l_custom: str = "", div_w_custom: str = "",
                      box_type: BoxType = BoxType.FULL_BOX, 
-                     style: LayoutStyle = LayoutStyle.SEPARATED) -> BoxDesign:
+                     style: LayoutStyle = LayoutStyle.SEPARATED,
+                     max_material_width: float = 0.0,
+                     max_material_height: float = 0.0,
+                     overlap_multiplier: float = 3.0,
+                     join_type: JoinType = JoinType.SIMPLE_OVERLAP) -> BoxDesign:
     """Create a complete box design from input parameters
     
     Args:
@@ -331,11 +344,15 @@ def create_box_design(length: float, width: float, height: float, thickness: flo
         inside: Whether dimensions are internal (True) or external (False)
         div_l: Number of dividers in length direction
         div_w: Number of dividers in width direction
-        div_l_custom: Custom compartment sizes for length direction
-        div_w_custom: Custom compartment sizes for width direction
+        div_l_custom: Custom compartment sizes for length direction        div_w_custom: Custom compartment sizes for width direction
         box_type: Type of box (BoxType enum: FULL_BOX, NO_TOP, etc.)
         style: Layout style (LayoutStyle enum: SEPARATED, NESTED, COMPACT)
-          Returns:
+        max_material_width: Maximum material width (0 = unlimited)
+        max_material_height: Maximum material height (0 = unlimited)
+        overlap_multiplier: Overlap = thickness * multiplier for split pieces
+        join_type: Type of joint for connecting split pieces
+        
+    Returns:
         BoxDesign object with all calculated dimensions and divider info
     """
     # Validate input parameters
@@ -404,14 +421,14 @@ def create_box_design(length: float, width: float, height: float, thickness: flo
     # Parse custom compartment sizes
     custom_l_sizes = parse_compartment_sizes(div_l_custom)
     custom_w_sizes = parse_compartment_sizes(div_w_custom)
-    
-    # Calculate divider configurations
+      # Calculate divider configurations
     length_dividers = calculate_divider_configuration(
         length_internal, custom_l_sizes, div_l, thickness)
     width_dividers = calculate_divider_configuration(
         width_internal, custom_w_sizes, div_w, thickness)
     
-    return BoxDesign(
+    # Create initial design
+    design = BoxDesign(
         length=length,
         width=width,
         height=height,
@@ -426,5 +443,313 @@ def create_box_design(length: float, width: float, height: float, thickness: flo
         length_dividers=length_dividers,
         width_dividers=width_dividers,
         box_type=box_type,
-        style=style
+        style=style,
+        max_material_width=max_material_width,
+        max_material_height=max_material_height,
+        overlap_multiplier=overlap_multiplier,
+        join_type=join_type
     )
+    
+    # Check for material limits and calculate split information
+    if max_material_width > 0 or max_material_height > 0:
+        split_info = check_material_limits(design)
+        design.split_info = split_info if split_info else None
+        
+        # TODO: Calculate actual split pieces
+        # design.split_pieces = calculate_split_pieces(design, split_info)
+    
+    return design
+
+
+@dataclass
+class SplitInfo:
+    """
+    Information about how a piece needs to be split to fit material size constraints.
+    
+    DESIGN PURPOSE:
+    ===============
+    This dataclass encapsulates all the information needed to split a box piece
+    that exceeds the maximum material dimensions. It serves as the planning
+    stage output that feeds into the actual piece generation process.
+    
+    FIELD DESCRIPTIONS:
+    ===================
+    needs_splitting: bool
+        - True if piece exceeds material limits and requires splitting
+        - False for pieces that fit within material constraints
+        - Used as a quick check before processing split logic
+    
+    split_direction: str  
+        - 'horizontal': Split with horizontal cuts (pieces stacked vertically)
+        - 'vertical': Split with vertical cuts (pieces arranged horizontally)
+        - Direction chosen based on which dimension exceeds limits
+        - Affects overlap placement and join geometry
+    
+    num_pieces: int
+        - Total number of pieces after splitting
+        - Calculated as ceil(dimension / available_per_piece)
+        - Minimum value is 2 (original piece requires at least one split)
+        - Higher values for severely oversized pieces
+    
+    overlap: float
+        - Amount of material overlap between adjacent pieces (in mm)
+        - Provides joining surface for assembly
+        - Calculated as thickness × overlap_multiplier with minimum 5mm
+        - Must be subtracted from available material area per piece
+    
+    split_positions: List[float]
+        - Positions where cuts are made in the original piece
+        - Values are distances from origin (top-left corner)
+        - Used to determine piece boundaries and overlap regions
+        - Length = num_pieces - 1 (one less cut than pieces)
+    
+    join_type: JoinType
+        - Type of mechanical joint to create in overlap regions
+        - SIMPLE_OVERLAP: Just overlapping material (current implementation)
+        - Future: DOVETAIL, FINGER_JOINT, SQUARES for stronger connections
+        - Affects the complexity of generated geometry
+    
+    USAGE FLOW:
+    ===========
+    1. check_material_limits() creates SplitInfo for oversized pieces
+    2. _generate_split_pieces() uses SplitInfo to create individual SplitPiece objects
+    3. SVG generation processes each SplitPiece separately
+    4. Join geometry is added based on join_type specification
+    """
+    needs_splitting: bool         # Whether the piece exceeds material limits
+    split_direction: str          # 'horizontal' or 'vertical' 
+    num_pieces: int              # Number of pieces after splitting
+    overlap: float               # Overlap distance between pieces
+    split_positions: List[float] # Positions where splits occur
+    join_type: JoinType          # Type of joint to use
+    
+
+@dataclass
+class SplitPiece:
+    """
+    A single piece resulting from splitting an oversized box component.
+    
+    DESIGN PURPOSE:
+    ===============
+    Represents one individual piece after an oversized box component has been
+    split to fit within material size constraints. Contains all the information
+    needed to generate the SVG geometry for this specific piece.
+    
+    COORDINATE SYSTEM:
+    ==================
+    All measurements are in mm, relative to the original piece's coordinate system.
+    - offset_x, offset_y: Position of this piece within the original piece boundaries
+    - width, height: Final dimensions of this piece including any overlap regions
+    - Overlap flags indicate which edges extend beyond the original piece boundaries
+    
+    FIELD DESCRIPTIONS:
+    ===================
+    width, height: float
+        - Final dimensions of this piece in mm
+        - Includes overlap regions where applicable
+        - Used directly for SVG path generation
+        - May differ from calculated dimensions due to remainder handling
+    
+    x_offset, y_offset: float  
+        - Position of this piece's origin within the original piece
+        - Used to calculate which portion of the original geometry to include
+        - Critical for maintaining proper tab/slot alignment across pieces
+        - Zero for first piece in each direction
+    
+    piece_index: int
+        - Index of this piece within the split sequence (0-based)
+        - Used for identification and assembly instruction generation
+        - Affects overlap placement (first/middle/last pieces differ)
+        - Important for maintaining proper piece ordering
+    
+    total_pieces: int
+        - Total number of pieces in this split sequence
+        - Used to determine if this is first, middle, or last piece
+        - Affects overlap geometry and join requirements
+        - Constant across all pieces from same original component
+    
+    is_first, is_last: bool
+        - Convenience flags for overlap and join geometry decisions
+        - First piece: no overlap at leading edge, overlap at trailing edge
+        - Last piece: overlap at leading edge, no overlap at trailing edge
+        - Middle pieces: overlap on both edges for double connections
+    
+    USAGE IN GENERATION:
+    ====================
+    1. Each SplitPiece is processed as an independent box component
+    2. Original box geometry is clipped to piece boundaries using offsets
+    3. Overlap regions receive special join geometry based on join_type
+    4. Tab/slot positions are adjusted to maintain alignment across splits
+    5. Each piece gets unique identification for assembly purposes
+    
+    ASSEMBLY CONSIDERATIONS:
+    ========================
+    - Pieces must be assembled in sequence (piece_index order)
+    - Overlap regions require mechanical fasteners or adhesive
+    - Join geometry must align precisely between adjacent pieces
+    - Assembly instructions should reference piece_index for clarity
+    """
+    width: float                 # Final width of this piece
+    height: float                # Final height of this piece
+    x_offset: float              # X offset from original piece origin
+    y_offset: float              # Y offset from original piece origin
+    piece_index: int             # Index within the split pieces (0, 1, 2...)
+    total_pieces: int            # Total number of pieces in split
+    is_first: bool               # True for first piece in sequence
+    is_last: bool                # True for last piece in sequence
+
+
+def get_piece_dimensions(design: BoxDesign) -> Dict[str, Tuple[float, float]]:
+    """Get the dimensions (width, height) of each box piece
+    
+    Returns:
+        Dictionary mapping piece names to (width, height) tuples
+        
+    TODO: Add support for different box types beyond full box
+    TODO: Consider divider dimensions for boxes with dividers
+    """
+    wall_config = get_wall_configuration(design.box_type)
+    pieces = {}
+    
+    # Main panels (assuming full box for now)
+    if wall_config.has_front:
+        pieces['front'] = (design.length_external, design.height_external)
+    if wall_config.has_back:
+        pieces['back'] = (design.length_external, design.height_external)
+    if wall_config.has_left:
+        pieces['left'] = (design.width_external, design.height_external)
+    if wall_config.has_right:
+        pieces['right'] = (design.width_external, design.height_external)
+    if wall_config.has_top:
+        pieces['top'] = (design.length_external, design.width_external)
+    if wall_config.has_bottom:
+        pieces['bottom'] = (design.length_external, design.width_external)
+    
+    # TODO: Add divider pieces
+    # if design.length_dividers.count > 0:
+    #     for i in range(design.length_dividers.count):
+    #         pieces[f'divider_l_{i}'] = (design.width_internal, design.height_internal)
+    # if design.width_dividers.count > 0:
+    #     for i in range(design.width_dividers.count):
+    #         pieces[f'divider_w_{i}'] = (design.length_internal, design.height_internal)
+    
+    return pieces
+
+
+def check_material_limits(design: BoxDesign) -> Dict[str, SplitInfo]:
+    """
+    Check which pieces exceed material size limits and calculate split requirements.
+    
+    DETECTION STRATEGY:
+    ===================
+    This function implements the first phase of piece splitting: detection and planning.
+    It analyzes each box piece against the configured material size limits and determines
+    if splitting is required and how it should be performed.
+    
+    MATERIAL LIMIT HANDLING:
+    - Width limit: Maximum width of material sheet (e.g., 300mm for small laser cutters)
+    - Height limit: Maximum height of material sheet (e.g., 300mm for small laser cutters)
+    - Setting limits to 0 disables size checking (unlimited material)
+    - Both limits can be active simultaneously for square material constraints
+    
+    SPLIT DIRECTION LOGIC:
+    - Height exceeds limit → Horizontal split (multiple pieces stacked vertically)
+    - Width exceeds limit → Vertical split (multiple pieces arranged horizontally)
+    - Both exceed → Height takes priority (horizontal split chosen)
+    - This prioritization minimizes the number of splits needed
+    
+    OVERLAP CALCULATION:
+    - Base overlap = material thickness × overlap_multiplier (default 3x)
+    - Minimum overlap = 5mm (ensures sufficient material for joining)
+    - Overlap provides material for mechanical fasteners or adhesive bonding
+    - Must be subtracted from available cutting area per piece
+    
+    PIECE COUNT CALCULATION:
+    - Available area per piece = material_limit - overlap_amount
+    - Number of pieces = ceil(piece_dimension / available_per_piece)
+    - Split positions calculated to distribute pieces evenly
+    - Each split position represents where the original piece will be cut
+    
+    CURRENT LIMITATIONS:
+    ====================
+    - Only implements simple even splitting (future: optimize for minimal waste)
+    - No consideration of grain direction (future: respect wood grain orientation)
+    - Fixed overlap amount (future: variable overlap based on join type)
+    - No joint complexity consideration (future: account for tab/slot requirements)
+    
+    FUTURE ENHANCEMENTS:
+    ====================
+    - Split optimization algorithms (minimize waste, balance piece sizes)
+    - Material grain direction awareness for wood/plywood
+    - Variable overlap based on join type and stress analysis
+    - Integration with tab/slot positioning to avoid splits through joints
+    - User-selectable split strategies (even, optimized, custom)
+    - Assembly instruction generation for split pieces
+    
+    Args:
+        design: BoxDesign with material limits and overlap configuration
+        
+    Returns:
+        Dictionary mapping piece names to SplitInfo objects for pieces requiring splits.
+        Empty dictionary if no pieces exceed material limits.
+    """
+    split_info = {}
+    
+    # Early exit if no material limits configured (unlimited material size)
+    if design.max_material_width <= 0 and design.max_material_height <= 0:
+        return split_info
+    
+    # Get dimensions of all box pieces that will be generated
+    piece_dimensions = get_piece_dimensions(design)
+    
+    # Calculate overlap amount with minimum safety margin
+    overlap = max(design.thickness * design.overlap_multiplier, 5.0)  # Minimum 5mm overlap
+    
+    # Check each piece against material limits
+    for piece_name, (width, height) in piece_dimensions.items():
+        # Determine which dimensions exceed limits
+        needs_width_split = design.max_material_width > 0 and width > design.max_material_width
+        needs_height_split = design.max_material_height > 0 and height > design.max_material_height
+        
+        if needs_width_split or needs_height_split:
+            # SPLIT DIRECTION PRIORITY:
+            # Height constraint takes priority over width constraint
+            # This typically results in fewer total pieces
+            split_direction = 'horizontal' if needs_height_split else 'vertical'
+            
+            # Calculate number of pieces and split positions
+            if split_direction == 'horizontal':
+                # HORIZONTAL SPLITTING (pieces stacked vertically)
+                # Each piece height must fit within material height limit
+                available_per_piece = design.max_material_height - overlap
+                num_pieces = int(math.ceil(height / available_per_piece))
+                
+                # Calculate where to make cuts in the original piece
+                split_positions = []
+                for i in range(1, num_pieces):
+                    # Position of cut line from top of original piece
+                    split_positions.append(i * available_per_piece)
+                    
+            else:
+                # VERTICAL SPLITTING (pieces arranged horizontally)
+                # Each piece width must fit within material width limit
+                available_per_piece = design.max_material_width - overlap
+                num_pieces = int(math.ceil(width / available_per_piece))
+                
+                # Calculate where to make cuts in the original piece
+                split_positions = []
+                for i in range(1, num_pieces):
+                    # Position of cut line from left of original piece
+                    split_positions.append(i * available_per_piece)
+            
+            # Create split info for this piece
+            split_info[piece_name] = SplitInfo(
+                needs_splitting=True,
+                split_direction=split_direction,
+                num_pieces=num_pieces,
+                overlap=overlap,
+                split_positions=split_positions,
+                join_type=design.join_type
+            )
+    
+    return split_info
