@@ -153,11 +153,17 @@ DEFAULT_MAX_MATERIAL_HEIGHT = 0.0  # 0 = unlimited/disabled
 # The splitting system creates multiple smaller pieces with overlap regions that
 # can be joined together during assembly.
 #
-# OVERLAP CALCULATION:
+# OVERLAP CALCULATION WITH SMART THICKNESS-BASED LIMITS:
 # The overlap between adjacent split pieces provides material for joining:
 # - Base overlap = material_thickness × DEFAULT_OVERLAP_MULTIPLIER  
-# - Minimum overlap = MIN_OVERLAP (safety margin for thin materials)
-# - Maximum overlap = MAX_OVERLAP (prevents excessive waste)
+# - Minimum overlap = material_thickness × MIN_OVERLAP_MULTIPLIER (never less than thickness)
+# - Maximum overlap = material_thickness × MAX_OVERLAP_MULTIPLIER (prevents excessive waste)
+#
+# THICKNESS-BASED RATIONALE:
+# - Minimum 1x thickness ensures adequate material for any joining method
+# - Default 3.5x thickness provides good balance of strength and material efficiency
+# - Maximum 6x thickness prevents excessive waste while allowing thick material flexibility
+# - All limits scale proportionally with material thickness for consistency
 #
 # OVERLAP PURPOSES:
 # - Provides surface area for adhesive bonding
@@ -166,12 +172,20 @@ DEFAULT_MAX_MATERIAL_HEIGHT = 0.0  # 0 = unlimited/disabled
 # - Accommodates manufacturing tolerances
 #
 # RECOMMENDED VALUES:
-# - 3x thickness works well for most woodworking applications
-# - Thicker materials may need proportionally less overlap
-# - Complex join types (dovetail, finger) may need more overlap
-DEFAULT_OVERLAP_MULTIPLIER = 3.0  # Overlap = thickness * multiplier
-MIN_OVERLAP = 5.0                 # Minimum overlap in mm (safety for thin materials)
-MAX_OVERLAP = 50.0                # Maximum overlap in mm (prevents excessive waste)
+# - 3.5x thickness works well for most woodworking applications
+# - Thicker materials automatically get proportionally larger overlaps
+# - Complex join types (dovetail, finger) may use upper end of range
+# - Thin materials (< 3mm) get adequate overlap despite small thickness
+#
+# PIECE SIZE CONSTRAINTS:
+# - MIN_SPLIT_PIECE_RATIO: No split piece smaller than 25% of max material dimension
+# - Prevents unusably small pieces that are difficult to handle and cut
+# - May require increasing piece count or adjusting split strategy
+# - Critical for maintaining practical manufacturability
+DEFAULT_OVERLAP_MULTIPLIER = 3.5  # Overlap = thickness * multiplier (balanced default)
+MIN_OVERLAP_MULTIPLIER = 1.0      # Minimum overlap = thickness * 1.0 (never less than thickness)
+MAX_OVERLAP_MULTIPLIER = 6.0      # Maximum overlap = thickness * 6.0 (prevents excessive waste)
+MIN_SPLIT_PIECE_RATIO = 0.25      # Minimum piece size = 25% of max material dimension
 
 # Join configuration defaults
 # ===========================

@@ -50,7 +50,10 @@ from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
 import math
 from boxmaker_exceptions import DimensionError, ValidationError
-from boxmaker_constants import BoxType, LayoutStyle, JoinType
+from boxmaker_constants import (
+    BoxType, LayoutStyle, JoinType, MIN_SPLIT_PIECE_RATIO,
+    DEFAULT_OVERLAP_MULTIPLIER, MIN_OVERLAP_MULTIPLIER, MAX_OVERLAP_MULTIPLIER
+)
 
 
 @dataclass
@@ -514,14 +517,20 @@ class SplitInfo:
     1. check_material_limits() creates SplitInfo for oversized pieces
     2. _generate_split_pieces() uses SplitInfo to create individual SplitPiece objects
     3. SVG generation processes each SplitPiece separately
-    4. Join geometry is added based on join_type specification
-    """
+    4. Join geometry is added based on join_type specification    """
     needs_splitting: bool         # Whether the piece exceeds material limits
     split_direction: str          # 'horizontal' or 'vertical' 
     num_pieces: int              # Number of pieces after splitting
     overlap: float               # Overlap distance between pieces
     split_positions: List[float] # Positions where splits occur
     join_type: JoinType          # Type of joint to use
+    
+    # NEW FIELDS FOR ENHANCED DESIGN REQUIREMENTS:
+    min_piece_size: float        # Minimum allowed piece size (25% of max material dim)
+    adjusted_positions: List[float] # Split positions adjusted to avoid tabs/slots
+    safe_zones: List[Tuple[float, float]] # Areas safe for splitting (no critical geometry)
+    has_boundary_adjustments: bool # True if split lines were moved from optimal positions
+    geometry_conflicts: List[str]  # List of any unresolvable conflicts with tabs/slots
     
 
 @dataclass
@@ -663,12 +672,19 @@ def check_material_limits(design: BoxDesign) -> Dict[str, SplitInfo]:
     - Minimum overlap = 5mm (ensures sufficient material for joining)
     - Overlap provides material for mechanical fasteners or adhesive bonding
     - Must be subtracted from available cutting area per piece
-    
-    PIECE COUNT CALCULATION:
-    - Available area per piece = material_limit - overlap_amount
-    - Number of pieces = ceil(piece_dimension / available_per_piece)
-    - Split positions calculated to distribute pieces evenly
+      PIECE COUNT CALCULATION WITH SIZE CONSTRAINTS:
+    - Available area per piece = material_limit - overlap_amount  
+    - Initial pieces = ceil(piece_dimension / available_per_piece)
+    - Minimum piece size = material_limit × MIN_SPLIT_PIECE_RATIO (25%)
+    - If any piece would be < minimum, reduce piece count and recalculate
+    - Split positions calculated to distribute pieces optimally
     - Each split position represents where the original piece will be cut
+    
+    SIZE CONSTRAINT ENFORCEMENT:
+    - No piece smaller than 25% of maximum material dimension
+    - Prevents unusably small pieces difficult to handle/cut
+    - May result in fewer, larger pieces instead of many small ones
+    - Ensures practical manufacturability across all piece sizes
     
     CURRENT LIMITATIONS:
     ====================
@@ -701,9 +717,16 @@ def check_material_limits(design: BoxDesign) -> Dict[str, SplitInfo]:
     
     # Get dimensions of all box pieces that will be generated
     piece_dimensions = get_piece_dimensions(design)
+      # Calculate overlap amount with smart thickness-based limits
+    # Base overlap from user configuration (default 3.5x thickness)
+    base_overlap = design.thickness * design.overlap_multiplier
     
-    # Calculate overlap amount with minimum safety margin
-    overlap = max(design.thickness * design.overlap_multiplier, 5.0)  # Minimum 5mm overlap
+    # Apply thickness-based minimum and maximum limits
+    min_overlap = design.thickness * MIN_OVERLAP_MULTIPLIER  # Never less than 1x thickness
+    max_overlap = design.thickness * MAX_OVERLAP_MULTIPLIER  # Never more than 6x thickness
+    
+    # Clamp overlap to smart range
+    overlap = max(min_overlap, min(base_overlap, max_overlap))
     
     # Check each piece against material limits
     for piece_name, (width, height) in piece_dimensions.items():
@@ -716,31 +739,67 @@ def check_material_limits(design: BoxDesign) -> Dict[str, SplitInfo]:
             # Height constraint takes priority over width constraint
             # This typically results in fewer total pieces
             split_direction = 'horizontal' if needs_height_split else 'vertical'
-            
-            # Calculate number of pieces and split positions
+              # Calculate number of pieces and split positions with size constraints
             if split_direction == 'horizontal':
                 # HORIZONTAL SPLITTING (pieces stacked vertically)
                 # Each piece height must fit within material height limit
                 available_per_piece = design.max_material_height - overlap
-                num_pieces = int(math.ceil(height / available_per_piece))
+                initial_num_pieces = int(math.ceil(height / available_per_piece))
                 
-                # Calculate where to make cuts in the original piece
+                # Apply 25% minimum piece size constraint
+                min_piece_size = design.max_material_height * MIN_SPLIT_PIECE_RATIO
+                actual_piece_size = height / initial_num_pieces
+                
+                if actual_piece_size < min_piece_size:
+                    # Reduce piece count to ensure minimum size
+                    max_allowed_pieces = int(math.floor(height / min_piece_size))
+                    num_pieces = max(2, max_allowed_pieces)  # At least 2 pieces for splitting
+                else:
+                    num_pieces = initial_num_pieces
+                
+                # Calculate optimized split positions
+                piece_height = height / num_pieces
                 split_positions = []
                 for i in range(1, num_pieces):
                     # Position of cut line from top of original piece
-                    split_positions.append(i * available_per_piece)
+                    split_positions.append(i * piece_height)
                     
             else:
                 # VERTICAL SPLITTING (pieces arranged horizontally)
                 # Each piece width must fit within material width limit
                 available_per_piece = design.max_material_width - overlap
-                num_pieces = int(math.ceil(width / available_per_piece))
+                initial_num_pieces = int(math.ceil(width / available_per_piece))
+                
+                # Apply 25% minimum piece size constraint  
+                min_piece_size = design.max_material_width * MIN_SPLIT_PIECE_RATIO
+                actual_piece_size = width / initial_num_pieces
+                
+                if actual_piece_size < min_piece_size:
+                    # Reduce piece count to ensure minimum size
+                    max_allowed_pieces = int(math.floor(width / min_piece_size))
+                    num_pieces = max(2, max_allowed_pieces)  # At least 2 pieces for splitting
+                else:
+                    num_pieces = initial_num_pieces
+                
+                # Calculate optimized split positions
+                piece_width = width / num_pieces
+                split_positions = []
+                for i in range(1, num_pieces):
+                    # Position of cut line from left of original piece
+                    split_positions.append(i * piece_width)
                 
                 # Calculate where to make cuts in the original piece
                 split_positions = []
                 for i in range(1, num_pieces):
                     # Position of cut line from left of original piece
                     split_positions.append(i * available_per_piece)
+              # Determine minimum piece size based on split direction
+            if split_direction == 'horizontal':
+                min_piece_size = design.max_material_height * MIN_SPLIT_PIECE_RATIO
+                material_limit = design.max_material_height
+            else:
+                min_piece_size = design.max_material_width * MIN_SPLIT_PIECE_RATIO  
+                material_limit = design.max_material_width
             
             # Create split info for this piece
             split_info[piece_name] = SplitInfo(
@@ -749,7 +808,13 @@ def check_material_limits(design: BoxDesign) -> Dict[str, SplitInfo]:
                 num_pieces=num_pieces,
                 overlap=overlap,
                 split_positions=split_positions,
-                join_type=design.join_type
+                join_type=design.join_type,
+                # NEW FIELDS for enhanced design requirements:
+                min_piece_size=min_piece_size,
+                adjusted_positions=split_positions.copy(),  # Initially same as split_positions
+                safe_zones=[],  # Will be populated when tab/slot analysis is implemented
+                has_boundary_adjustments=False,  # No adjustments in current implementation
+                geometry_conflicts=[]  # No conflicts detected yet (future feature)
             )
     
     return split_info
