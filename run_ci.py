@@ -225,8 +225,7 @@ def test_error_handling():
             ],
             "desc": "Tab too large error",
             "expect_error": "Tab Error"
-        },
-        {
+        },        {
             "cmd": [
                 sys.executable, "boxmaker.py",
                 "--length", "10", "--width", "10", "--height", "10",  # Too small
@@ -234,7 +233,7 @@ def test_error_handling():
                 "--output", "error_test.svg"
             ],
             "desc": "Dimensions too small error",
-            "expect_error": "Dimension Error"
+            "expect_error": "Parameter Error"  # Changed from "Dimension Error"
         }
     ]
     

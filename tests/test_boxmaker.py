@@ -10,11 +10,9 @@ import tempfile
 from pathlib import Path
 
 # Add the current directory to the path to import our modules
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from boxmaker_core import BoxMakerCore
-from boxmaker_exceptions import DimensionError, TabError, MaterialError, ValidationError
-from boxmaker_constants import BoxType
+from TabbedBoxMaker import BoxMakerCore, DimensionError, TabError, MaterialError, ValidationError, BoxType
 
 
 def test_basic_box():

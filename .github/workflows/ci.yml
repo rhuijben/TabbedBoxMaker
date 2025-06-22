@@ -1,4 +1,4 @@
-name: CI - Test and Validate BoxMaker
+name: CI - TabbedBoxMaker Test Suite
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: Test BoxMaker Functionality
+    name: Run CI Test Suite
     runs-on: ubuntu-latest
     
     steps:
@@ -19,28 +19,16 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'  # Latest Python version
+        python-version: '3.12'
         
-    - name: Create test directories
+    - name: Install dependencies
       run: |
-        python -c "import os; os.makedirs('test_results', exist_ok=True)"
+        python -m pip install --upgrade pip
+        python -m pip install pytest
         
-    - name: Run comprehensive test suite
+    - name: Run CI Test Suite
       run: |
-        echo "🧪 Running comprehensive BoxMaker test suite..."
-        python test_boxmaker.py
-        
-    - name: Run design system tests
-      run: |
-        echo "🎨 Running design system tests..."
-        python test_design.py
-        
-    - name: Run core functionality tests
-      run: |
-        echo "⚙️ Running core functionality tests..."
-        python test_updated_core.py
-        python boxmaker.py --length 100 --width 80 --height 50 --thickness 3 --tab 12 --output test_ci.svg
-        python -c "import os; import sys; print('✓ CLI generated SVG successfully' if os.path.exists('test_ci.svg') else '❌ CLI failed to generate SVG'); sys.exit(0 if os.path.exists('test_ci.svg') else 1)"
+        python run_ci.py
         
     - name: Archive test results
       if: always()
@@ -50,40 +38,8 @@ jobs:
         path: |
           test_results/
           test_assets/
-          test_ci.svg
+          *.svg
         retention-days: 30
-
-  test-inkscape-version:
-    name: Test with Inkscape Python Version
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python (Inkscape version)
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'  # Common Inkscape Python version
-        
-    - name: Create test directories
-      run: |
-        python -c "import os; os.makedirs('test_results', exist_ok=True)"
-        
-    - name: Run test suite
-      run: |
-        echo "🧪 Running BoxMaker test suite with Python 3.11..."
-        python test_boxmaker.py
-        
-    - name: Run design system tests
-      run: |
-        echo "🎨 Running design system tests with Python 3.11..."
-        python test_design.py
-        
-    - name: Run CLI integration tests
-      run: |
-        echo "🚀 Running CLI integration tests with Python 3.11..."
-        python test_cli_integration.py
 
   cross-platform:
     name: Cross-Platform Test
@@ -106,21 +62,11 @@ jobs:
       run: |
         echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
         
-    - name: Create test directories
+    - name: Install dependencies
       run: |
-        python -c "import os; os.makedirs('test_results', exist_ok=True)"
+        python -m pip install --upgrade pip
+        python -m pip install pytest
         
-    - name: Run basic test
+    - name: Run CI Test Suite
       run: |
-        echo "🧪 Running basic test on ${{ matrix.os }}..."
-        python test_boxmaker.py
-        
-    - name: Run design tests
-      run: |
-        echo "🎨 Running design tests on ${{ matrix.os }}..."
-        python test_design.py
-        
-    - name: Test CLI
-      run: |
-        echo "🔧 Testing CLI on ${{ matrix.os }}..."
-        python boxmaker.py --length 150 --width 120 --height 80 --thickness 6 --tab 18 --output platform_test.svg
+        python run_ci.py

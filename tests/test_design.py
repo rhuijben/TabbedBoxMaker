@@ -3,8 +3,14 @@
 Test the new box design logic
 """
 
-from box_design import create_box_design, parse_compartment_sizes
-from boxmaker_constants import BoxType, LayoutStyle
+import sys
+from pathlib import Path
+
+# Add the project root to the path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from TabbedBoxMaker.design import create_box_design, parse_compartment_sizes
+from TabbedBoxMaker import BoxType, LayoutStyle
 
 def test_basic_design():
     """Test basic box design without dividers"""
