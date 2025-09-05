@@ -138,6 +138,67 @@ def dimpleStr(tabVector, vectorX, vectorY, dirX,
     return ds
 
 
+def subtract_holes_from_panels(groups):
+    """
+    Subtract hole paths from main panel outlines by creating compound paths.
+    This creates cleaner output where holes are properly subtracted rather than
+    being separate overlapping elements.
+    """
+    for group in groups:
+        if group is None or len(group) == 0:
+            continue
+
+        # Get all path elements in the group
+        path_elements = [child for child in group.descendants()
+                         if isinstance(child, inkex.PathElement)]
+
+        if len(path_elements) <= 1:
+            continue  # No holes to subtract
+
+        # Find the main outline (typically the first and usually longest path)
+        # The main outline is usually added first in the side() function
+        main_outline = None
+        hole_paths = []
+
+        # The main outline is typically the last path added (the panel perimeter)
+        # and holes are added before it in the side() function
+        for i, path_elem in enumerate(path_elements):
+            path = inkex.Path(path_elem.path)
+            # Check if this path is closed or looks like a main outline
+            # Main outlines are typically longer and added last
+            if i == len(path_elements) - \
+                    1:  # Last path is usually the main outline
+                main_outline = path_elem
+            else:
+                hole_paths.append(path_elem)
+
+        if main_outline is None or len(hole_paths) == 0:
+            continue
+
+        # Create a compound path that subtracts holes from the main outline
+        # In SVG, this is done by combining paths with opposite winding
+        main_path = inkex.Path(main_outline.path)
+        compound_path_data = str(main_path)
+
+        # Add hole paths with opposite winding (reverse direction)
+        for hole_elem in hole_paths:
+            hole_path = inkex.Path(hole_elem.path)
+            # Reverse the hole path to create a subtraction
+            reversed_hole = hole_path.reverse()
+            compound_path_data += " " + str(reversed_hole)
+
+        # Create new compound path element
+        compound_element = inkex.PathElement()
+        compound_element.path = compound_path_data
+        compound_element.style = main_outline.style.copy()
+        # Set fill-rule to evenodd to handle hole subtraction properly
+        compound_element.style['fill-rule'] = 'evenodd'
+
+        # Replace all the individual paths with the compound path
+        group.clear()
+        group.add(compound_element)
+
+
 def side(group, root, startOffset, endOffset, tabVec, prevTab, length,
          direction, isTab, isDivider, numDividers, dividerSpacing):
     rootX, rootY = root
@@ -851,6 +912,9 @@ class BoxMaker(inkex.Effect):
                     side(subGroup, (x, y + dy), (d, -c), (d, a), keydivfloor * dtabs *
                          # side d
                          (-thickness if d else thickness), ctabs, dy, (0, -1), d, 1, 0, 0)
+
+            # Subtract holes from main panels to create clean compound paths
+            subtract_holes_from_panels(groups)
 
             if self.options.optimize:
                 # Step 1: Combine paths to form the outer boundary
