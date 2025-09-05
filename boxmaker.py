@@ -65,7 +65,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 __version__ = "1.3" ### please report bugs, suggestions etc at https://github.com/paulh-rnd/TabbedBoxMaker ###
 
-from boxmaker.main import main
+from boxmaker.cli import main
 
 if __name__ == "__main__":
   main()
